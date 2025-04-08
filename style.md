@@ -106,7 +106,7 @@ python main.py --backtest data.csv --config configs/example_config.json
 ## Documentation Maintenance
 
 ### Documentation Compliance Strategy
-Adherence to documentation standards must be maintained so we can leverage docstring parsers for automated documentation. This will help us continue to leverage LLMs economically as the codebase grows.
+We leverage docstring parsers for automated documentation. This will help us continue to employ LLMs economically as the codebase grows (feed them docstrings rather full files).
 
 #### Compliance Mechanisms
 - Implement pre-commit hooks to validate docstring coverage

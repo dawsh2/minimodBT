@@ -1,7 +1,15 @@
+"""
+Technical analysis functions.
+
+This is a simplified version of your existing ta.py file,
+with only the functions needed for the trading system.
+"""
+
 import pandas as pd
 import numpy as np
 
 def count_trade_no(signal):
+    """Count the number of trades."""
     no_trades = 0
     prev = 10
     for i in signal:
@@ -11,21 +19,26 @@ def count_trade_no(signal):
     return no_trades
 
 def ema(series, n):
+    """Calculate Exponential Moving Average."""
     return series.ewm(span=n, min_periods=n).mean()
 
 def ma(close, n):
+    """Calculate Simple Moving Average."""
     return close.rolling(n).mean()
     
 def DEMA(close, n):
+    """Calculate Double Exponential Moving Average."""
     EMA = ema(close, n)
     return 2*EMA - ema(EMA,n)
 
 def TEMA(close, n):
+    """Calculate Triple Exponential Moving Average."""
     EMA = ema(close, n)
     EEMA = ema(EMA, n)
     return 3*EMA - 3*EEMA + ema(EEMA, n)
 
 def rsi(close, n=14):
+    """Calculate Relative Strength Index."""
     diff = close.diff(1)
     which_dn = diff < 0
     up, dn = diff, diff*0
@@ -36,12 +49,14 @@ def rsi(close, n=14):
     return pd.Series(rsi, name='rsi')
 
 def stoch(high, low, close, n=14, fillna=False):
+    """Calculate Stochastic Oscillator."""
     smin = low.rolling(n, min_periods=0).min()
     smax = high.rolling(n, min_periods=0).max()
     stoch_k = 100 * (close - smin) / (smax - smin)
     return pd.Series(stoch_k, name='stoch_k')
 
 def stoch_signal(high, low, close, n=14, d_n=3, fillna=False):
+    """Calculate Stochastic Oscillator Signal."""
     stoch_k = stoch(high, low, close, n, fillna=fillna)
     stoch_d = stoch_k.rolling(d_n, min_periods=0).mean()
 
@@ -50,6 +65,7 @@ def stoch_signal(high, low, close, n=14, d_n=3, fillna=False):
     return pd.Series(stoch_d, name='stoch_d')
 
 def average_true_range(high, low, close, n=14, fillna=False):
+    """Calculate Average True Range."""
     cs = close.shift(1)
     tr = high.combine(cs, max) - low.combine(cs, min)
 
@@ -62,6 +78,7 @@ def average_true_range(high, low, close, n=14, fillna=False):
     return pd.Series(atr, name='atr')
 
 def vortex_indicator_pos(high, low, close, n=14, fillna=False):
+    """Calculate Positive Vortex Indicator."""
     tr = (high.combine(close.shift(1), max)
           - low.combine(close.shift(1), min))
     trn = tr.rolling(n).sum()
@@ -74,8 +91,8 @@ def vortex_indicator_pos(high, low, close, n=14, fillna=False):
         vip = vip.replace([np.inf, -np.inf], np.nan).fillna(1)
     return pd.Series(vip, name='vip')
 
-
 def vortex_indicator_neg(high, low, close, n=14, fillna=False):
+    """Calculate Negative Vortex Indicator."""
     tr = high.combine(close.shift(1), max) - low.combine(close.shift(1), min)
     trn = tr.rolling(n).sum()
 
@@ -88,30 +105,34 @@ def vortex_indicator_neg(high, low, close, n=14, fillna=False):
     return pd.Series(vin, name='vin')
 
 def cci(high, low, close, n=20, c=0.015):
+    """Calculate Commodity Channel Index."""
     pp = (high + low + close) / 3.0
     cci = (pp - pp.rolling(n, min_periods=0).mean()) / (c * pp.rolling(n, min_periods=0).std())
     return pd.Series(cci, name='cci')
 
 def bollinger_mavg(close, n=20, fillna=False):
+    """Calculate Bollinger Bands Moving Average."""
     mavg = close.rolling(n, min_periods=0).mean()
     if fillna:
-        mavg = mavg.replace(
-            [np.inf, -np.inf], np.nan).fillna(method='backfill')
+        mavg = mavg.replace([np.inf, -np.inf], np.nan).fillna(method='backfill')
     return pd.Series(mavg, name='mavg')
 
 def bollinger_hband(close, n=20, ndev=2, fillna=False):
+    """Calculate Bollinger Bands High Band."""
     mavg = close.rolling(n, min_periods=0).mean()
     mstd = close.rolling(n, min_periods=0).std()
     hband = mavg + ndev*mstd
     return pd.Series(hband, name='hband')
 
 def bollinger_lband(close, n=20, ndev=2, fillna=False):
+    """Calculate Bollinger Bands Low Band."""
     mavg = close.rolling(n, min_periods=0).mean()
     mstd = close.rolling(n, min_periods=0).std()
     lband = mavg - ndev * mstd
     return pd.Series(lband, name='lband')
 
 def keltner_channel_hband(high, low, close, n=10, fillna=False):
+    """Calculate Keltner Channel High Band."""
     tp = ((4 * high) - (2 * low) + close) / 3.0
     tp = tp.rolling(n, min_periods=0).mean()
     if fillna:
@@ -119,27 +140,27 @@ def keltner_channel_hband(high, low, close, n=10, fillna=False):
     return pd.Series(tp, name='kc_hband')
 
 def keltner_channel_lband(high, low, close, n=10):
+    """Calculate Keltner Channel Low Band."""
     tp = ((-2 * high) + (4 * low) + close) / 3.0
     tp = tp.rolling(n, min_periods=0).mean()
     return pd.Series(tp, name='kc_lband')
 
 def donchian_channel_hband(close, n=20, fillna=False):
+    """Calculate Donchian Channel High Band."""
     hband = close.rolling(n, min_periods=0).max()
     if fillna:
-        hband = hband.replace(
-            [np.inf, -np.inf], np.nan).fillna(method='backfill')
+        hband = hband.replace([np.inf, -np.inf], np.nan).fillna(method='backfill')
     return pd.Series(hband, name='dchband')
 
-
 def donchian_channel_lband(close, n=20, fillna=False):
+    """Calculate Donchian Channel Low Band."""
     lband = close.rolling(n, min_periods=0).min()
     if fillna:
-        lband = lband.replace(
-            [np.inf, -np.inf], np.nan).fillna(method='backfill')
+        lband = lband.replace([np.inf, -np.inf], np.nan).fillna(method='backfill')
     return pd.Series(lband, name='dclband')
 
-
 def ichimoku_a(high, low, n1=9, n2=26, visual=False, fillna=False):
+    """Calculate Ichimoku Cloud Conversion Line."""
     conv = 0.5 * (high.rolling(n1, min_periods=0).max() + low.rolling(n1, min_periods=0).min())
     base = 0.5 * (high.rolling(n2, min_periods=0).max() + low.rolling(n2, min_periods=0).min())
 
@@ -153,8 +174,8 @@ def ichimoku_a(high, low, n1=9, n2=26, visual=False, fillna=False):
 
     return pd.Series(spana, name='ichimoku_a_'+str(n2))
 
-
 def ichimoku_b(high, low, n2=26, n3=52, visual=False, fillna=False):
+    """Calculate Ichimoku Cloud Base Line."""
     spanb = 0.5 * (high.rolling(n3, min_periods=0).max() + low.rolling(n3, min_periods=0).min())
 
     if visual:

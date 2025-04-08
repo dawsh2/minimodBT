@@ -14,12 +14,13 @@ project_root/
 │   ├── poms/              # Portfolio and Order Management System
 │   ├── risk/              # Risk management and position sizing
 │   ├── execution/         # Trade execution logic
-│   ├── performance/       # Performance evaluation
-│   └── deployment/        # Scripts for deployment and monitoring
+│   ├── analysis/          # Performance evaluation and analysis 
+│   └── deploy/        # Scripts for deployment and monitoring
 ├── tests/                 # Unit and integration tests
 ├── docs/
-│   ├── style.md    # High-level system architecture
-│   ├── glossary.md        # Domain-specific terminology
+│   ├── ARCHITECTURE.md    # High-level system architecture
+│   ├── GLOSSARY.md        # Domain-specific terminology
+│   ├── style.md           # Coding and documentation standards
 │   └── api/               # Auto-generated API documentation
 ├── config.yaml            # Centralized configuration
 ├── main.py                # Primary entry point
@@ -104,6 +105,14 @@ python main.py --backtest data.csv --config configs/example_config.json
 
 ## Documentation Maintenance
 
+### Documentation Compliance Strategy
+Adherence to documentation standards must be maintained so we can leverage docstring parsers for automated documentation. This will help us continue to leverage LLMs economically as the codebase grows.
+
+#### Compliance Mechanisms
+- Implement pre-commit hooks to validate docstring coverage
+- Use static analysis tools to enforce documentation standards
+- Integrate documentation checks into continuous integration (CI) pipelines
+
 ### Architectural Documentation
 - Maintain `ARCHITECTURE.md` in the project root
 - Update with significant changes
@@ -111,6 +120,17 @@ python main.py --backtest data.csv --config configs/example_config.json
   - Component responsibilities
   - Data flow diagrams
   - Key interfaces between components
+
+#### Documentation Tooling
+- Utilize automated documentation generators (e.g., Sphinx, MkDocs)
+- Implement regular documentation audits
+- Create scripts to validate documentation completeness and consistency
+
+### LLM Documentation Optimization
+- Ensure docstrings are structured for efficient LLM parsing
+- Use consistent formatting and terminology
+- Include context-rich metadata to improve LLM comprehension
+- Maintain a centralized glossary of domain-specific terms
 
 ### Relationship Mapping
 - Document component relationships using consistent notation:

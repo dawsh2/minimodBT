@@ -339,6 +339,121 @@ def split_data(df, train_ratio=0.7):
     return train_df, test_df
 
 
+def visualize_regimes(df, regime_filter_func, output_dir=None):
+    """
+    Visualize the detected market regimes with support for adaptive thresholds.
+    
+    Args:
+        df: DataFrame with OHLC data
+        regime_filter_func: Function to detect market regimes
+        output_dir: Optional directory to save the plot
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    
+    # Get regimes
+    regime_splits = regime_filter_func(df)
+    
+    # Create a series representing the regime for each date
+    all_regimes = pd.Series(index=df.index)
+    for regime, regime_data in regime_splits.items():
+        all_regimes[regime_data.index] = regime
+    
+    # Fill any NaN values
+    all_regimes = all_regimes.fillna(-1)
+    
+    # Plot
+    fig, ax = plt.subplots(2, 1, figsize=(15, 10), sharex=True)
+    
+    # Plot price
+    ax[0].plot(df.index, df.Close, label='Close Price')
+    ax[0].set_title('Price with Regime Overlay')
+    ax[0].set_ylabel('Price')
+    ax[0].grid(True)
+    
+    # Setup date formatting
+    if len(df) > 1000:
+        ax[0].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax[0].xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    
+    # Add colored background for regimes
+    colors = {0: 'lightgray', 1: 'lightgreen', 2: 'lightcoral', -1: 'white'}
+    
+    # For discrete regimes, use vertical spans
+    regime_changes = all_regimes.ne(all_regimes.shift()).cumsum()
+    for i, (_, g) in enumerate(all_regimes.groupby(regime_changes)):
+        if not g.empty:
+            start_date = g.index[0]
+            end_date = g.index[-1]
+            regime = g.iloc[0]
+            ax[0].axvspan(start_date, end_date, alpha=0.3, color=colors.get(regime, 'white'))
+    
+    # Plot volatility
+    returns = np.log(df.Close / df.Close.shift(1))
+    volatility = returns.rolling(window=20).std()
+    ax[1].plot(df.index, volatility, label='20-day Volatility', color='navy')
+    ax[1].set_title('Volatility with Regime Thresholds')
+    ax[1].set_ylabel('Volatility')
+    ax[1].grid(True)
+    
+    # Add volatility thresholds
+    if hasattr(regime_filter_func, 'thresholds'):
+        vol_low, vol_high = regime_filter_func.thresholds
+        
+        # Check if thresholds are time-varying (adaptive method)
+        if hasattr(regime_filter_func, 'is_time_varying') and regime_filter_func.is_time_varying:
+            # Plot time-varying thresholds
+            ax[1].plot(df.index, vol_low, color='green', linestyle='--', label='Low Threshold')
+            ax[1].plot(df.index, vol_high, color='red', linestyle='--', label='High Threshold')
+        else:
+            # Plot constant thresholds
+            ax[1].axhline(y=vol_low, color='green', linestyle='--', label=f'Low Thresh ({vol_low:.6f})')
+            ax[1].axhline(y=vol_high, color='red', linestyle='--', label=f'High Thresh ({vol_high:.6f})')
+    else:
+        # Fallback to percentile thresholds if not stored in function
+        vol_low = volatility.quantile(0.25)
+        vol_high = volatility.quantile(0.75)
+        ax[1].axhline(y=vol_low, color='green', linestyle='--', label=f'Low Thresh ({vol_low:.6f})')
+        ax[1].axhline(y=vol_high, color='red', linestyle='--', label=f'High Thresh ({vol_high:.6f})')
+    
+    # Create legend for regimes
+    legend_patches = []
+    for regime in sorted(colors.keys()):
+        if regime in regime_splits:
+            regime_desc = describe_regime(regime)
+            legend_patches.append(
+                plt.matplotlib.patches.Patch(
+                    color=colors[regime], 
+                    alpha=0.3, 
+                    label=f'Regime {regime}: {regime_desc}'
+                )
+            )
+    
+    # Add regime statistics to legend
+    for regime in sorted(regime_splits.keys()):
+        regime_data = regime_splits[regime]
+        pct = len(regime_data) / len(df) * 100
+        if regime_data.index[0] != regime_data.index[-1]:
+            legend_patches.append(
+                plt.matplotlib.patches.Patch(
+                    fill=False, 
+                    label=f'Regime {regime}: {pct:.1f}% ({len(regime_data)} points)'
+                )
+            )
+    
+    ax[0].legend(handles=legend_patches, loc='upper left')
+    ax[1].legend()
+    
+    plt.tight_layout()
+    
+    # Save if output_dir is provided
+    if output_dir:
+        filepath = os.path.join(output_dir, 'regime_visualization.png')
+        plt.savefig(filepath)
+        print(f"Saved regime visualization to {filepath}")
+    
+    plt.show()
+
 def train(df, output_dir, optimize=True, seed=42, config=None):
     """
     Train trading rules and optimize weights.
@@ -870,6 +985,23 @@ def main():
             
             # Compare train and test performance
             print_train_test_comparison(train_metrics, test_metrics)
+            visualize_regimes(df, basic_volatility_regime_filter, output_dir='output/regimes')
 
 if __name__ == "__main__":
     main()
+
+
+# def main():
+#     # Load raw data
+#     df = load_data(args.data)
+    
+#     # Prepare time-aligned data (add this step)
+#     from data_utils import prepare_aligned_data
+#     aligned_df = prepare_aligned_data(df)
+    
+#     # Now pass the aligned data to all functions
+#     if args.train:
+#         train(aligned_df, args.output, config=config)
+#     elif args.test:
+#         test(aligned_df, params_file, config=config)
+#     # ...and so on     

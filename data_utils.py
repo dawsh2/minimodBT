@@ -9,6 +9,41 @@ import numpy as np
 import pandas as pd
 from typing import List, Callable, Dict, Union, Optional
 
+def prepare_trading_data(df):
+    """
+    Prepare all trading data with consistent timing to avoid lookahead bias.
+    All indicators and signals are shifted to ensure they only use data
+    available at the time of decision making.
+    """
+    # Make a copy to avoid modifying the original
+    trading_df = df.copy()
+    
+    # Calculate returns (Close[t] / Close[t-1])
+    trading_df['returns'] = np.log(trading_df.Close / trading_df.Close.shift(1))
+    
+    # Calculate volatility (20-day rolling standard deviation)
+    trading_df['volatility'] = trading_df['returns'].rolling(window=20).std()
+    
+    # Calculate other indicators (moving averages, etc.)
+    trading_df['ma50'] = trading_df.Close.rolling(50).mean()
+    trading_df['ma200'] = trading_df.Close.rolling(200).mean()
+    # ... other indicators
+    
+    # Now shift ALL indicators by 1 to ensure no lookahead bias
+    # We exclude raw price data (Open, High, Low, Close, Volume) as these are inputs
+    cols_to_shift = [col for col in trading_df.columns 
+                     if col not in ['Open', 'High', 'Low', 'Close', 'Volume', 'Date']]
+    
+    for col in cols_to_shift:
+        trading_df[f'{col}_t1'] = trading_df[col].shift(1)
+    
+    # Drop rows with NaN values after shifting
+    trading_df = trading_df.dropna()
+    
+    # Now all '_t1' columns contain data that would have been available
+    # at the time of making trading decisions
+    return trading_df
+
 # !!!: FIX 
 # Wrapper to work with legacy code, getTradingRuleFeatures
 # This is also a bad name imo
@@ -246,3 +281,50 @@ def merge_regime_features(
     
     else:
         raise ValueError(f"Unknown merging method: {method}")
+
+
+def detect_regimes(trading_df):
+    """
+    Detect market regimes using already-shifted indicators.
+    """
+    # Use the shifted volatility for regime detection
+    volatility = trading_df['volatility_t1']
+    
+    # Calculate adaptive thresholds using shifted data
+    vol_baseline = trading_df['volatility_t1'].rolling(252, min_periods=60).mean()
+    vol_low = vol_baseline * 0.7
+    vol_high = vol_baseline * 1.3
+    
+    # Apply regimes based on shifted data
+    regime_series = pd.Series(0, index=trading_df.index)
+    regime_series[volatility <= vol_low] = 1
+    regime_series[volatility >= vol_high] = 2
+
+    # No need to shift again, as we're already using shifted data
+    return regime_series
+
+
+# In data_utils.py - Add a central data preparation function
+def prepare_aligned_data(df):
+    """Prepare time-aligned data to avoid lookahead bias system-wide."""
+    aligned_df = df.copy()
+    
+    # Calculate all technical indicators first
+    aligned_df['returns'] = np.log(aligned_df.Close / aligned_df.Close.shift(1))
+    aligned_df['volatility_20d'] = aligned_df['returns'].rolling(20).std()
+    
+    # Add all other technical indicators your rules might need
+    # MA, EMA, RSI, stochastics, etc.
+    
+    # Shift all derived indicators by 1 day to avoid lookahead
+    indicator_cols = [col for col in aligned_df.columns 
+                     if col not in ['Open', 'High', 'Low', 'Close', 'Volume', 'Date']]
+    
+    for col in indicator_cols:
+        aligned_df[f'{col}_t1'] = aligned_df[col].shift(1)
+    
+    # Drop rows with NaN values
+    aligned_df = aligned_df.dropna()
+    
+    return aligned_df
+    

@@ -128,6 +128,8 @@ def train(df, output_dir, optimize=True):
         print("Training complete! (No weight optimization performed)")
         return rule_params, None
 
+
+# TODO: Add output_dir - ?
 def test(df, params_file, weights_file=None):
     """Test trading strategy using trained parameters."""
     # Load rule parameters
@@ -213,7 +215,7 @@ def test(df, params_file, weights_file=None):
     plt.grid(True)
     
     plt.tight_layout()
-    plt.savefig('/results/backtest_results.png')
+    # plt.savefig(os.path.join(output_dir, 'backtest_results.png')) -- output_dir not in scope 
     plt.show()
     
     return {

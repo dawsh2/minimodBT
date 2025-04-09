@@ -502,18 +502,23 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
         return rule_params, None, metrics
 
 
-def test(df, params_file, config=None):
+def test(df, params_file, weights_file=None, output_dir=None, seed=42, config=None):
     """
-    Test trading strategy with flexible configuration.
+    Test trading strategy using trained parameters.
     
     Args:
         df: DataFrame with OHLC data
         params_file: Path to rule parameters pickle file
+        weights_file: Path to optimized weights pickle file (optional)
+        output_dir: Directory to save results and charts (optional)
+        seed: Random seed for reproducibility
         config: Optional configuration dictionary
-    
+        
     Returns:
         Dictionary of performance metrics
     """
+    # Merge default configuration
+    
     # Default configuration
     # Configs are about to get bloated and nasty, fix! 
     default_config = {
@@ -524,12 +529,10 @@ def test(df, params_file, config=None):
         'regime_params': None,
         'feature_merge_method': 'concatenate'
     }
-    
-    # Merge default config with provided config
     config = {**default_config, **(config or {})}
     
     # Set random seed
-    set_random_seed(config['seed'])
+    set_random_seed(seed)    
     
     # Create output directory if provided and doesn't exist
     if config['output_dir']:

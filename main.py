@@ -367,7 +367,7 @@ def train(df, output_dir, optimize=True):
         metrics = calculate_performance_metrics(trading_rule_df, final_signal)
         
         # Print and plot the results
-        print_performance_metrics(metrics, "TRAINING SET PERFORMANCE (WITH OPTIMIZED WEIGHTS)")
+        print_performance_metrics(metrics, "TRAINING SET PERFORMANCE")
         plot_performance(metrics, os.path.join(output_dir, 'training_performance.png'))
         save_performance_data(metrics, output_dir, 'training_performance.csv')
         
@@ -428,7 +428,7 @@ def test(df, params_file, weights_file=None, output_dir=None):
     metrics = calculate_performance_metrics(trading_rule_df, final_signal)
     
     # Print performance metrics
-    title = "BACKTEST RESULTS (WITH OPTIMIZED WEIGHTS)" if weights is not None else "BACKTEST RESULTS (MAJORITY VOTE)"
+    title = "OUT OF SAMPLE RESULTS (WITH OPTIMIZED WEIGHTS)" if weights is not None else "BACKTEST RESULTS (MAJORITY VOTE)"
     print_performance_metrics(metrics, title)
     
     # Plot results

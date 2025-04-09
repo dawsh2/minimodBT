@@ -502,37 +502,32 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
         return rule_params, None, metrics
 
 
-def test(df, params_file, weights_file=None, output_dir=None, seed=42, config=None):
+def test(df, params_file, config=None, seed=42):
     """
     Test trading strategy using trained parameters.
     
     Args:
         df: DataFrame with OHLC data
         params_file: Path to rule parameters pickle file
-        weights_file: Path to optimized weights pickle file (optional)
-        output_dir: Directory to save results and charts (optional)
-        seed: Random seed for reproducibility
         config: Optional configuration dictionary
+        seed: Random seed for reproducibility
         
     Returns:
         Dictionary of performance metrics
     """
-    # Merge default configuration
-    
     # Default configuration
-    # Configs are about to get bloated and nasty, fix! 
     default_config = {
         'weights_file': None,
         'output_dir': None,
-        'seed': 42,
         'regime_filter_func': None,
-        'regime_params': None,
-        'feature_merge_method': 'concatenate'
+        'regime_params': None
     }
+    
+    # Merge default config with provided config
     config = {**default_config, **(config or {})}
     
     # Set random seed
-    set_random_seed(seed)    
+    set_random_seed(seed)
     
     # Create output directory if provided and doesn't exist
     if config['output_dir']:
@@ -547,8 +542,7 @@ def test(df, params_file, weights_file=None, output_dir=None, seed=42, config=No
         df, 
         rule_params,
         regime_filter_func=config['regime_filter_func'],
-        regime_params=config['regime_params'],
-        feature_merge_method=config['feature_merge_method']
+        regime_params=config.get('regime_params')
     )
     
     # Load weights if provided
@@ -571,18 +565,17 @@ def test(df, params_file, weights_file=None, output_dir=None, seed=42, config=No
     print_performance_metrics(metrics, title)
     
     # Plot results
-    if output_dir:
-        plot_path = os.path.join(output_dir, 'backtest_results.png')
+    if config['output_dir']:
+        plot_path = os.path.join(config['output_dir'], 'backtest_results.png')
     else:
         plot_path = None
     plot_performance(metrics, plot_path)
     
     # Save performance data if output directory is provided
-    if output_dir:
-        save_performance_data(metrics, output_dir, 'backtest_data.csv')
+    if config['output_dir']:
+        save_performance_data(metrics, config['output_dir'], 'backtest_data.csv')
     
-    return metrics
-
+    return metrics    
 
 
 def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=42):
@@ -701,6 +694,8 @@ def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=
     
     return aggregate_results
 
+
+
 def main():
     """Main entry point with CLI arguments."""
     parser = argparse.ArgumentParser(description='Advanced Trading System CLI')
@@ -772,7 +767,8 @@ def main():
         
         test(df, params_file, config={
             'weights_file': weights_file,
-            'regime_filter_func': config.get('regime_filter_func')
+            'regime_filter_func': config.get('regime_filter_func'),
+            'output_dir': test_results_dir
         }, seed=seed)
     
     elif args.backtest:

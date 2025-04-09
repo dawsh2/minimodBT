@@ -341,7 +341,8 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
         return Rule_params
 
      # Regime-based optimization
-    else:
+         # Regime-based optimization
+    if regime_filter_func is not None:
         # Split data into regimes
         regime_splits = regime_filter_func(df)
         
@@ -495,6 +496,10 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
         
         # Return regime-specific parameters
         return regime_rule_params
+
+    else:
+        print("NO REGIME -- DELETE THIS LATER")
+        return False 
 
 # Modify getTradingRuleFeatures to handle regime-specific parameters
 def getTradingRuleFeatures(df, rule_params):

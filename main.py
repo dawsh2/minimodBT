@@ -1,3 +1,4 @@
+import time
 import argparse
 import pandas as pd
 import numpy as np
@@ -10,13 +11,56 @@ from pathlib import Path
 from trading_rules import trainTradingRuleFeatures, getTradingRuleFeatures
 from ga import cal_pop_fitness, select_mating_pool, crossover, mutation
 
-# Performance calculation functions
-def calculate_signal(trading_rule_df, weights=None):
+def set_random_seed(seed=42):
+    """Set random seeds for reproducibility."""
+    np.random.seed(seed)
+    # If you're using other random number generators, set their seeds as well
+    # e.g., random.seed(seed)  # Uncomment if using Python's random module
+
+def compare_rule_signals(train_data, test_data):
+    """Compare rule signals between training and testing sets."""
+    rule_columns = [col for col in train_data.columns if col.startswith('Rule')]
+    
+    print("\nRule Signal Comparison (Train vs Test):")
+    print("-" * 70)
+    print(f"{'Rule':<10} {'Train Mean':<12} {'Test Mean':<12} {'Train STD':<12} {'Test STD':<12} {'Correlation':<12}")
+    print("-" * 70)
+    
+    results = {}
+    for col in rule_columns:
+        train_mean = train_data[col].mean()
+        test_mean = test_data[col].mean()
+        train_std = train_data[col].std()
+        test_std = test_data[col].std()
+        
+        # Calculate correlation if there's an overlap period
+        try:
+            train_recent = train_data[col].iloc[-min(30, len(train_data)):]
+            test_recent = test_data[col].iloc[:min(30, len(test_data))]
+            corr = np.corrcoef(train_recent, test_recent)[0, 1]
+        except:
+            corr = np.nan
+        
+        print(f"{col:<10} {train_mean:>10.3f}   {test_mean:>10.3f}   {train_std:>10.3f}   {test_std:>10.3f}   {corr:>10.3f}")
+        
+        results[col] = {
+            'train_mean': train_mean,
+            'test_mean': test_mean,
+            'train_std': train_std,
+            'test_std': test_std,
+            'correlation': corr
+        }
+    
+    print("-" * 70)
+    return results
+
+def calculate_signal(trading_rule_df, weights=None, discretization_method='adaptive'):
     """Calculate trading signal based on rule outputs and optional weights.
     
     Args:
         trading_rule_df: DataFrame with trading rule signals and logr column
         weights: Optional array of weights for each rule
+        discretization_method: Method for signal discretization ('adaptive', 'fixed')
         
     Returns:
         Pandas Series with the final trading signal (-1, 0, 1)
@@ -33,10 +77,20 @@ def calculate_signal(trading_rule_df, weights=None):
         for i, col in enumerate(rule_columns):
             weighted_signal += trading_rule_df[col] * weights[i]
         
+        # Adaptive or fixed discretization
+        if discretization_method == 'adaptive':
+            # Use population quantiles for thresholding
+            lower_thresh = np.percentile(weighted_signal, 25)
+            upper_thresh = np.percentile(weighted_signal, 75)
+        else:
+            # Traditional fixed thresholds
+            lower_thresh = -0.2
+            upper_thresh = 0.2
+        
         # Discretize the signal (-1, 0, 1)
         final_signal = pd.Series(0, index=trading_rule_df.index)
-        # final_signal[weighted_signal > 0.2] = 1
-        # final_signal[weighted_signal < -0.2] = -1
+        final_signal[weighted_signal > upper_thresh] = 1
+        final_signal[weighted_signal < lower_thresh] = -1
     else:
         # Simple majority vote if no weights
         signals = trading_rule_df[rule_columns].sum(axis=1)
@@ -46,26 +100,43 @@ def calculate_signal(trading_rule_df, weights=None):
         
     return final_signal
 
-def calculate_performance_metrics(trading_rule_df, signal):
+def calculate_performance_metrics(trading_rule_df, signal, detailed=False):
     """Calculate performance metrics for a trading strategy.
     
     Args:
         trading_rule_df: DataFrame with trading rule signals and logr column
         signal: Final trading signal (-1, 0, 1)
+        detailed: Whether to return more detailed metrics
         
     Returns:
         Dictionary containing performance metrics
     """
+    # Ensure signal and log returns have the same index
     logr = trading_rule_df['logr']
     strategy_returns = signal * logr
     
+    # Compute transaction costs (optional)
+    # Assuming a fixed transaction cost per trade
+    transaction_cost_rate = 0.001  # 0.1% per trade
+    trade_changes = signal.diff()
+    num_trades = (trade_changes != 0).sum()
+    transaction_costs = num_trades * transaction_cost_rate * 2  # Roundtrip cost
+
     # Calculate cumulative returns
-    cumulative_returns = (np.exp(strategy_returns.cumsum()) - 1) * 100
+    strategy_returns_net = strategy_returns  # - small per-trade transaction costs
+    cumulative_returns = (np.exp(strategy_returns_net.cumsum()) - 1) * 100
     
     # Calculate performance metrics
     total_return = cumulative_returns.iloc[-1]
-    annualized_return = total_return / (len(strategy_returns) / 252) * 100  # Assuming 252 trading days
-    sharpe_ratio = strategy_returns.mean() / strategy_returns.std() * np.sqrt(252) if strategy_returns.std() > 0 else 0
+    trading_periods = len(strategy_returns)
+    trading_years = trading_periods / 252  # Assuming 252 trading days per year
+    annualized_return = (np.exp(strategy_returns.mean() * 252) - 1) * 100
+    
+    # More robust Sharpe Ratio calculation
+    if strategy_returns.std() > 0:
+        sharpe_ratio = strategy_returns.mean() / strategy_returns.std() * np.sqrt(252)
+    else:
+        sharpe_ratio = 0
     
     # Calculate drawdowns
     cumulative_returns_exp = np.exp(strategy_returns.cumsum())
@@ -73,14 +144,11 @@ def calculate_performance_metrics(trading_rule_df, signal):
     drawdown = (cumulative_returns_exp / running_max - 1) * 100
     max_drawdown = drawdown.min()
     
-    # Calculate win rate
-    win_rate = (strategy_returns > 0).sum() / len(strategy_returns)
+    # Calculate win rate (when in position)
+    win_rate = (strategy_returns[signal != 0] > 0).sum() / len(strategy_returns[signal != 0])
     
-    # Calculate trades
-    signal_changes = signal.diff().fillna(0)
-    num_trades = (signal_changes != 0).sum()
-    
-    return {
+    # Compute metrics dictionary
+    metrics = {
         'total_return': total_return,
         'annualized_return': annualized_return,
         'sharpe_ratio': sharpe_ratio,
@@ -91,6 +159,21 @@ def calculate_performance_metrics(trading_rule_df, signal):
         'drawdown': drawdown,
         'strategy_returns': strategy_returns
     }
+    
+    # Optional detailed metrics
+    if detailed:
+        # Additional statistical metrics
+        metrics.update({
+            'mean_return': strategy_returns.mean(),
+            'return_std': strategy_returns.std(),
+            'skewness': strategy_returns.skew(),
+            'kurtosis': strategy_returns.kurtosis(),
+            'max_single_return': strategy_returns.max(),
+            'min_single_return': strategy_returns.min()
+        })
+    
+    return metrics
+
 
 def calculate_individual_rule_performance(trading_rule_df):
     """Calculate performance metrics for each individual trading rule.
@@ -225,36 +308,6 @@ def print_train_test_comparison(train_metrics, test_metrics):
     print(f"Trades:         {train_metrics['num_trades']:>8}        {test_metrics['num_trades']:>8}")
     print("="*50)
 
-def compare_rule_signals(train_data, test_data):
-    """Compare rule signals between training and testing sets."""
-    rule_columns = [col for col in train_data.columns if col.startswith('Rule')]
-    
-    print("\nRule Signal Comparison (Train vs Test):")
-    print("-" * 70)
-    print(f"{'Rule':<10} {'Train Mean':<12} {'Test Mean':<12} {'Train STD':<12} {'Test STD':<12} {'Correlation':<12}")
-    print("-" * 70)
-    
-    for col in rule_columns:
-        train_mean = train_data[col].mean()
-        test_mean = test_data[col].mean()
-        train_std = train_data[col].std()
-        test_std = test_data[col].std()
-        
-        # Calculate correlation if there's an overlap period
-        if len(train_data) > 0 and len(test_data) > 0:
-            try:
-                train_recent = train_data[col].iloc[-min(30, len(train_data)):]
-                test_recent = test_data[col].iloc[:min(30, len(test_data))]
-                corr = np.corrcoef(train_recent, test_recent)[0, 1]
-            except:
-                corr = np.nan
-        else:
-            corr = np.nan
-        
-        print(f"{col:<10} {train_mean:>10.3f}   {test_mean:>10.3f}   {train_std:>10.3f}   {test_std:>10.3f}   {corr:>10.3f}")
-    
-    print("-" * 70)
-    
 def load_data(filepath):
     """Load data from CSV file."""
     print(f"Loading data from {filepath}")
@@ -283,17 +336,21 @@ def split_data(df, train_ratio=0.7):
     print(f"Split data: {len(train_df)} training rows, {len(test_df)} testing rows")
     return train_df, test_df
 
-def train(df, output_dir, optimize=True):
+def train(df, output_dir, optimize=True, seed=42):
     """Train trading rules and optimize weights.
     
     Args:
         df: DataFrame with OHLC data
         output_dir: Directory to save trained parameters and results
         optimize: Whether to optimize rule weights using GA
+        seed: Random seed for reproducibility
         
     Returns:
         Tuple of (rule_params, weights, performance_metrics)
     """
+    # Set random seed for reproducibility
+    set_random_seed(seed)
+    
     # Create output directory if it doesn't exist
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
@@ -325,17 +382,16 @@ def train(df, output_dir, optimize=True):
         # Prepare data for GA
         equation_inputs = trading_rule_df.values
         
-        # GA parameters
+        # GA parameters with regularization
         sol_per_pop = 8
         num_parents_mating = 4
-        num_generations = 100
+        num_generations = 50  # Reduced to prevent overfitting
         
         # Number of weights is the number of trading rules
         num_weights = equation_inputs.shape[1] - 1  # Subtract 1 for logr column
         
-        # Initialize population
-        pop_size = (sol_per_pop, num_weights)
-        new_population = np.random.uniform(low=-1.0, high=1.0, size=pop_size)
+        # Initialize population with small initial values to prevent extreme weights
+        new_population = np.random.uniform(low=-0.5, high=0.5, size=(sol_per_pop, num_weights))
         
         # Track best outputs
         best_outputs = []
@@ -345,18 +401,24 @@ def train(df, output_dir, optimize=True):
             if generation % 10 == 0:
                 print(f"Generation {generation}/{num_generations}")
                 
-            # Calculate fitness
+            # Calculate fitness with added regularization
             fitness = cal_pop_fitness(equation_inputs, new_population)
+            
+            # Add L1 regularization to fitness (penalize large weights)
+            reg_strength = 0.1
+            l1_penalty = np.sum(np.abs(new_population), axis=1)
+            fitness -= reg_strength * l1_penalty
+            
             best_outputs.append(np.max(fitness))
             
             # Select parents
             parents = select_mating_pool(new_population, fitness, num_parents_mating)
             
             # Generate offspring
-            offspring_crossover = crossover(parents, offspring_size=(pop_size[0]-parents.shape[0], num_weights))
+            offspring_crossover = crossover(parents, offspring_size=(new_population.shape[0]-parents.shape[0], num_weights))
             
-            # Apply mutation
-            offspring_mutation = mutation(offspring_crossover)
+            # Apply mutation with reduced mutation rate
+            offspring_mutation = mutation(offspring_crossover, num_mutations=1)
             
             # Create new population
             new_population[0:parents.shape[0], :] = parents
@@ -394,7 +456,14 @@ def train(df, output_dir, optimize=True):
         # Evaluate performance using optimized weights
         print("\nEvaluating strategy performance with optimized weights...")
         final_signal = calculate_signal(trading_rule_df, best_weights)
-        metrics = calculate_performance_metrics(trading_rule_df, final_signal)
+        
+        # Save the signal for debugging
+        signal_file = os.path.join(output_dir, 'training_signal.pkl')
+        with open(signal_file, 'wb') as f:
+            pickle.dump(final_signal, f)
+        print(f"Saved training signal to {signal_file}")
+        
+        metrics = calculate_performance_metrics(trading_rule_df, final_signal, detailed=True)
         
         # Print and plot the results
         print_performance_metrics(metrics, "TRAINING SET PERFORMANCE")
@@ -402,20 +471,13 @@ def train(df, output_dir, optimize=True):
         save_performance_data(metrics, output_dir, 'training_performance.csv')
         
         print("Training and optimization complete!")
-
-        # Save the weights and signal for debugging
-        if output_dir:
-            signal_file = os.path.join(output_dir, 'training_signal.pkl')
-            with open(signal_file, 'wb') as f:
-                pickle.dump(final_signal, f)
-            print(f"Saved training signal to {signal_file}")
         return rule_params, best_weights, metrics
     
     else:
         # Without optimization, evaluate using majority vote
         print("\nEvaluating majority vote strategy...")
         final_signal = calculate_signal(trading_rule_df)
-        metrics = calculate_performance_metrics(trading_rule_df, final_signal)
+        metrics = calculate_performance_metrics(trading_rule_df, final_signal, detailed=True)
         
         # Print and plot the results
         print_performance_metrics(metrics, "TRAINING SET PERFORMANCE (MAJORITY VOTE)")
@@ -426,7 +488,7 @@ def train(df, output_dir, optimize=True):
         return rule_params, None, metrics
 
 
-def test(df, params_file, weights_file=None, output_dir=None):
+def test(df, params_file, weights_file=None, output_dir=None, seed=42):
     """Test trading strategy using trained parameters.
     
     Args:
@@ -434,10 +496,14 @@ def test(df, params_file, weights_file=None, output_dir=None):
         params_file: Path to rule parameters pickle file
         weights_file: Path to optimized weights pickle file (optional)
         output_dir: Directory to save results and charts (optional)
+        seed: Random seed for reproducibility
         
     Returns:
         Dictionary of performance metrics
     """
+    # Set random seed
+    set_random_seed(seed)
+    
     # Create output directory if provided and doesn't exist
     if output_dir:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -462,7 +528,7 @@ def test(df, params_file, weights_file=None, output_dir=None):
     final_signal = calculate_signal(trading_rule_df, weights)
     
     # Calculate performance metrics
-    metrics = calculate_performance_metrics(trading_rule_df, final_signal)
+    metrics = calculate_performance_metrics(trading_rule_df, final_signal, detailed=True)
     
     # Print performance metrics
     title = "OUT OF SAMPLE RESULTS (WITH OPTIMIZED WEIGHTS)" if weights is not None else "BACKTEST RESULTS (MAJORITY VOTE)"
@@ -480,48 +546,168 @@ def test(df, params_file, weights_file=None, output_dir=None):
         save_performance_data(metrics, output_dir, 'backtest_data.csv')
     
     return metrics
+    
+def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=42):
+    """Perform walk-forward backtesting to evaluate strategy robustness.
+    
+    Args:
+        df: DataFrame with OHLC data
+        output_dir: Base directory for storing results
+        window_size: Fraction of data to use in each training window
+        step_size: Fraction of data to move between windows
+        seed: Random seed for reproducibility
+    """
+    # Set random seed
+    set_random_seed(seed)
+    
+    # Create output directory
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    total_rows = len(df)
+    window_size_rows = int(total_rows * window_size)
+    step_size_rows = int(total_rows * step_size)
+    
+    train_results = []
+    test_results = []
+    signal_comparisons = []
+    
+    for start_idx in range(0, total_rows - window_size_rows, step_size_rows):
+        end_idx = start_idx + window_size_rows
+        if end_idx >= total_rows:
+            break
+        
+        # Split into training and testing portions within the window
+        train_end = start_idx + int(window_size_rows * 0.7)
+        train_df = df.iloc[start_idx:train_end].copy()
+        test_df = df.iloc[train_end:end_idx].copy()
+        
+        print(f"\n{'='*50}")
+        print(f"Window {start_idx}:{end_idx}")
+        print(f"Training: {start_idx}:{train_end}")
+        print(f"Testing:  {train_end}:{end_idx}")
+        print(f"{'='*50}\n")
+        
+        # Create a unique output directory for this window
+        window_output = os.path.join(output_dir, f"window_{start_idx}_{end_idx}")
+        
+        # Train the strategy
+        rule_params, weights, train_metrics = train(train_df, window_output)
+        
+        # Prepare paths for saving parameters
+        params_file = os.path.join(window_output, 'rule_params.pkl')
+        weights_file = os.path.join(window_output, 'rule_weights.pkl')
+        
+        # Get trading rule features for test set
+        test_trading_rule_df = getTradingRuleFeatures(test_df, rule_params)
+        
+        # Apply weights or use majority vote
+        if weights is not None:
+            test_signal = calculate_signal(test_trading_rule_df, weights)
+        else:
+            test_signal = calculate_signal(test_trading_rule_df)
+        
+        # Calculate test performance
+        test_metrics = calculate_performance_metrics(test_trading_rule_df, test_signal, detailed=True)
+        
+        # Compare rule signals between train and test
+        train_rule_df = getTradingRuleFeatures(train_df, rule_params)
+        signal_comparison = compare_rule_signals(train_rule_df, test_trading_rule_df)
+        signal_comparisons.append(signal_comparison)
+        
+        # Store results
+        train_results.append(train_metrics)
+        test_results.append(test_metrics)
+        
+        # Print individual window comparison
+        print_train_test_comparison(train_metrics, test_metrics)
+    
+    # Aggregate results
+    print("\n" + "="*50)
+    print("AGGREGATE RESULTS ACROSS ALL WINDOWS")
+    print("="*50)
+    
+    # Metrics to aggregate
+    metric_keys = ['total_return', 'sharpe_ratio', 'win_rate', 'max_drawdown']
+    
+    # Calculate average metrics
+    avg_train = {k: np.mean([r[k] for r in train_results]) 
+                 for k in metric_keys}
+    avg_test = {k: np.mean([r[k] for r in test_results]) 
+                for k in metric_keys}
+    
+    # Calculate standard deviations
+    std_train = {k: np.std([r[k] for r in train_results]) 
+                 for k in metric_keys}
+    std_test = {k: np.std([r[k] for r in test_results]) 
+                for k in metric_keys}
+    
+    # Print aggregate comparison
+    print(f"{'Metric':<15} {'Train Mean':<15} {'Train Std':<15} {'Test Mean':<15} {'Test Std':<15}")
+    print("-" * 70)
+    for k in metric_keys:
+        print(f"{k:<15} {avg_train[k]:>12.2f}%   {std_train[k]:>12.2f}   "
+              f"{avg_test[k]:>12.2f}%   {std_test[k]:>12.2f}")
+    
+    # Save aggregate results
+    aggregate_results = {
+        'train_metrics': avg_train,
+        'test_metrics': avg_test,
+        'train_std': std_train,
+        'test_std': std_test,
+        'signal_comparisons': signal_comparisons
+    }
+    
+    # Save aggregate results to pickle
+    with open(os.path.join(output_dir, 'walk_forward_results.pkl'), 'wb') as f:
+        pickle.dump(aggregate_results, f)
+    
+    return aggregate_results
+
 
 def main():
     """Main entry point with CLI arguments."""
-    parser = argparse.ArgumentParser(description='Trading System CLI')
+    parser = argparse.ArgumentParser(description='Advanced Trading System CLI')
     
     # Define command-line arguments
     parser.add_argument('--data', type=str, required=True, help='Path to data file (CSV)')
-    parser.add_argument('--output', type=str, default='output', help='Output directory for trained parameters')
+    parser.add_argument('--output', type=str, default='output', help='Output directory for results')
     parser.add_argument('--train-ratio', type=float, default=0.7, help='Ratio of data to use for training')
-    parser.add_argument('--split', type=str, help='Split data and select portion for testing (format: start:end), e.g., "-0.3:1.0" for last 30%%, "0.7:1.0" for 70%% to 100%%')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--random-seed', action='store_true', help='Use a time-based random seed')
     
     # Define mutually exclusive command group
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--train', action='store_true', help='Train trading rules and optimize weights')
     group.add_argument('--test', action='store_true', help='Test using trained parameters')
-    group.add_argument('--backtest', action='store_true', help='Run both training and testing')
+    group.add_argument('--backtest', action='store_true', help='Perform backtesting')
+    
+    # Backtest-specific options
+    backtest_group = parser.add_argument_group('Backtesting Options')
+    backtest_group.add_argument('--walk-forward', action='store_true', 
+                                help='Enable walk-forward validation (more comprehensive but slower)')
+    backtest_group.add_argument('--window-size', type=float, default=0.3, 
+                                help='Fraction of data to use in each walk-forward window')
+    backtest_group.add_argument('--step-size', type=float, default=0.15, 
+                                help='Fraction of data to move between walk-forward windows')
     
     # Parse arguments
     args = parser.parse_args()
     
+    # Generate or use seed
+    if args.random_seed:
+        seed = int(time.time())
+    else:
+        seed = args.seed
+    
+    # Set random seed
+    set_random_seed(seed)
+    
     # Load data
     df = load_data(args.data)
     
-    if args.train or args.backtest:
-        if args.backtest:
-            # For backtest, split the data first
-            train_df, test_df = split_data(df, args.train_ratio)
-            
-            # Train on training data
-            rule_params, weights, train_metrics = train(train_df, args.output)
-            
-            # Test on testing data
-            params_file = os.path.join(args.output, 'rule_params.pkl')
-            weights_file = os.path.join(args.output, 'rule_weights.pkl')
-            test_metrics = test(test_df, params_file, weights_file, os.path.join(args.output, 'test_results'))
-            
-            # Compare train and test performance
-            print_train_test_comparison(train_metrics, test_metrics)
-            
-        else:
-            # Just train
-            rule_params, weights, train_metrics = train(df, args.output)
+    if args.train:
+        # Simple training on full dataset
+        train(df, args.output, seed=seed)
     
     elif args.test:
         # Test using saved parameters
@@ -531,31 +717,49 @@ def main():
         if not os.path.exists(params_file):
             raise FileNotFoundError(f"Parameters file not found: {params_file}")
         
-        # If split is specified, use only the selected portion of data
-        test_data = df
-        if args.split:
-            try:
-                start, end = map(float, args.split.split(':'))
-                
-                # Handle negative indices (Python-style slicing)
-                if start < 0:
-                    start = len(df) + start
-                else:
-                    start = int(start * len(df))
-                
-                if end <= 1:  # Treat as ratio
-                    end = int(end * len(df))
-                elif end < 0:  # Treat as negative index
-                    end = len(df) + end
-                else:
-                    end = int(end)
-                
-                test_data = df.iloc[start:end].copy()
-                print(f"Using data subset from index {start} to {end} ({len(test_data)} rows)")
-            except ValueError:
-                print(f"Invalid split format: {args.split}. Using all data.")
+        # Test on full dataset or load weights if available
+        weights = None
+        if os.path.exists(weights_file):
+            with open(weights_file, 'rb') as f:
+                weights = pickle.load(f)
         
-        test_metrics = test(test_data, params_file, weights_file, args.output)
+        test(df, params_file, weights_file, args.output, seed=seed)
+    
+    elif args.backtest:
+        # Create train results directory
+        train_results_dir = os.path.join(args.output, 'train_results')
+        os.makedirs(train_results_dir, exist_ok=True)
+        
+        # Backtest options
+        if args.walk_forward:
+            # Perform walk-forward backtesting
+            print("Performing comprehensive walk-forward backtesting...")
+            walk_forward_backtest(
+                df, 
+                args.output, 
+                window_size=args.window_size, 
+                step_size=args.step_size,
+                seed=seed
+            )
+        else:
+            # Default to quick train-test split backtest
+            print("Performing quick train-test backtest...")
+            train_df, test_df = split_data(df, args.train_ratio)
+            
+            # Train on training data
+            rule_params, weights, train_metrics = train(train_df, train_results_dir, seed=seed)
+            
+            # Test on testing data
+            params_file = os.path.join(train_results_dir, 'rule_params.pkl')
+            weights_file = os.path.join(train_results_dir, 'rule_weights.pkl')
+            
+            test_results_dir = os.path.join(args.output, 'test_results')
+            os.makedirs(test_results_dir, exist_ok=True)
+            
+            test_metrics = test(test_df, params_file, weights_file, test_results_dir, seed=seed)
+            
+            # Compare train and test performance
+            print_train_test_comparison(train_metrics, test_metrics)
 
 if __name__ == "__main__":
     main()

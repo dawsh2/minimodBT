@@ -12,6 +12,8 @@ from trading_rules import trainTradingRuleFeatures, getTradingRuleFeatures
 from ga import cal_pop_fitness, select_mating_pool, crossover, mutation
 from data_utils import get_trading_rule_features
 from regime_filter import basic_volatility_regime_filter
+from signal_debugger import debug_strategy_signals
+from top_n_strategy import generate_top_n_signal
 
 def set_random_seed(seed=42):
     """Set random seeds for reproducibility."""
@@ -56,51 +58,130 @@ def compare_rule_signals(train_data, test_data):
     print("-" * 70)
     return results
 
-def calculate_signal(trading_rule_df, weights=None, discretization_method='adaptive'):
+
+# Signal processing 
+def calculate_signal(trading_rule_df, weights=None, discretization_method='fixed'):
     """Calculate trading signal based on rule outputs and optional weights.
     
     Args:
         trading_rule_df: DataFrame with trading rule signals and logr column
         weights: Optional array of weights for each rule
-        discretization_method: Method for signal discretization ('adaptive', 'fixed')
+        discretization_method: Method for signal discretization ('adaptive', 'fixed', 'balanced')
         
     Returns:
         Pandas Series with the final trading signal (-1, 0, 1)
     """
     rule_columns = [col for col in trading_rule_df.columns if col.startswith('Rule')]
     
+    # This branch executes when weights are provided (GA optimization)
     if weights is not None:
+        # Debug flag - set to True to enable detailed diagnostics
+        debug = False
+
         # Ensure weights match number of rules
         if len(weights) != len(rule_columns):
             raise ValueError(f"Number of weights ({len(weights)}) doesn't match number of rules ({len(rule_columns)})")
-        
-        # Calculate weighted signal
+
+        # Normalize rule signals for scale consistency
+        rule_columns = [col for col in trading_rule_df.columns if col.startswith("Rule")]
+        trading_rule_df[rule_columns] = trading_rule_df[rule_columns].apply(
+            lambda x: (x - x.mean()) / (x.std() + 1e-6)
+        )
+
+        # Use weighted signal approach
         weighted_signal = pd.Series(0, index=trading_rule_df.index)
         for i, col in enumerate(rule_columns):
             weighted_signal += trading_rule_df[col] * weights[i]
-        
-        # Adaptive or fixed discretization
+
+        # Choose discretization method
         if discretization_method == 'adaptive':
-            # Use population quantiles for thresholding
-            lower_thresh = np.percentile(weighted_signal, 25)
-            upper_thresh = np.percentile(weighted_signal, 75)
+            lower_thresh = np.percentile(weighted_signal, 30)
+            upper_thresh = np.percentile(weighted_signal, 70)
+            if debug:
+                print(f"Using adaptive thresholds: lower={lower_thresh:.4f}, upper={upper_thresh:.4f}")
+        elif discretization_method == 'balanced':
+            mean_signal = weighted_signal.mean()
+            std_signal = weighted_signal.std()
+            lower_thresh = mean_signal - 0.5 * std_signal
+            upper_thresh = mean_signal + 0.5 * std_signal
+            if debug:
+                print(f"Using balanced thresholds: lower={lower_thresh:.4f}, upper={upper_thresh:.4f}")
         else:
-            # Traditional fixed thresholds
-            lower_thresh = -0.2
-            upper_thresh = 0.2
-        
+            signal_range = max(1.0, weighted_signal.abs().max() * 0.3)
+            lower_thresh = -0.1 * signal_range
+            upper_thresh = 0.1 * signal_range
+            if debug:
+                print(f"Using fixed thresholds: lower={lower_thresh:.4f}, upper={upper_thresh:.4f}")
+
         # Discretize the signal (-1, 0, 1)
         final_signal = pd.Series(0, index=trading_rule_df.index)
         final_signal[weighted_signal > upper_thresh] = 1
         final_signal[weighted_signal < lower_thresh] = -1
+
+        # Compare with equal-weight signal for benchmarking
+        if debug:
+            rule_cols = [col for col in trading_rule_df.columns if col.startswith("Rule")]
+            equal_signal = trading_rule_df[rule_cols].sum(axis=1)
+            equal_final_signal = np.sign(equal_signal)
+
+            # Calculate and compare returns
+            ga_returns = final_signal * trading_rule_df['logr']
+            equal_returns = equal_final_signal * trading_rule_df['logr']
+
+            print("GA Strategy Total Return:", ga_returns.sum())
+            print("Equal-Weight Total Return:", equal_returns.sum())
+
+            # Debug the strategy signals
+            debug_strategy_signals(trading_rule_df, final_signal, trading_rule_df['logr'])
+
+            # Optional diagnostics
+            print("Signal distribution:", final_signal.value_counts(normalize=True).to_dict())
+
+            # Visual diagnostics (if in a notebook or interactive environment)
+            try:
+                plt.hist(weighted_signal, bins=100)
+                plt.title("Weighted Signal Distribution (Normalized)")
+                plt.show()
+            except Exception as e:
+                print(f"Could not display histogram: {e}")
+
+            # Print signal distribution
+            long_pct = (final_signal == 1).mean() * 100
+            short_pct = (final_signal == -1).mean() * 100
+            neutral_pct = (final_signal == 0).mean() * 100
+            print(f"Signal distribution: Long={long_pct:.1f}%, Short={short_pct:.1f}%, Neutral={neutral_pct:.1f}%")
     else:
+        print("NO WEIGHTS -- DEFAULTING TO TOP_N")
+        # use top_n rules 
+        if 'regime' in trading_rule_df.columns:
+            # Call with regime information if available
+            final_signal = generate_top_n_signal(
+                trading_rule_df,
+                trading_rule_df['logr'],
+                regime_series=trading_rule_df['regime'],
+                top_n=3
+            )
+        else:
+            # Call without regime information if not available
+            final_signal = generate_top_n_signal(
+                trading_rule_df,
+                trading_rule_df['logr'],
+                top_n=3
+            )
         # Simple majority vote if no weights
-        signals = trading_rule_df[rule_columns].sum(axis=1)
-        final_signal = pd.Series(0, index=trading_rule_df.index)
-        final_signal[signals > 0] = 1
-        final_signal[signals < 0] = -1
-        
+        #signals = trading_rule_df[rule_columns].sum(axis=1)
+        # final_signal = pd.Series(0, index=trading_rule_df.index)
+        # # Using a small threshold for majority voting to avoid too many trades with weak consensus
+        # threshold = 0.05 * len(rule_columns)
+        # final_signal[signals > threshold] = 1
+        # final_signal[signals < -threshold] = -1
+
+
     return final_signal
+
+
+
+
 
 
 def calculate_performance_metrics(trading_rule_df, signal, detailed=False):
@@ -804,7 +885,8 @@ def visualize_regimes(df, regime_filter_func, output_dir=None):
     
     plt.show()
 
-def train(df, output_dir, optimize=True, seed=42, config=None):
+
+def train(df, output_dir, use_weights=True, seed=42, config=None):
     """
     Train trading rules and optimize weights.
     
@@ -885,23 +967,24 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
     with open(os.path.join(output_dir, 'rule_stats.pkl'), 'wb') as f:
         pickle.dump(rule_stats, f)
     
-    if optimize:
+    if use_weights:
         # Genetic Algorithm optimization (similar to previous implementation)
         print("\nOptimizing rule weights using genetic algorithm...")
         
         # Prepare data for GA
         equation_inputs = trading_rule_df.values
         
-        # GA parameters (could be made configurable)
-        sol_per_pop = 8
-        num_parents_mating = 4
-        num_generations = 200
+        # GA parameters with improved values
+        sol_per_pop = 20    # Increased population size (was 8)
+        num_parents_mating = 8    # Increased number of parents (was 4)
+        num_generations = 300     # Increased number of generations (was 200)
         
         # Number of weights is the number of trading rules
         num_weights = equation_inputs.shape[1] - 1  # Subtract 1 for logr column
         
         # Initialize population with small initial values to prevent extreme weights
-        new_population = np.random.uniform(low=-0.5, high=0.5, size=(sol_per_pop, num_weights))
+        # Using wider range for initialization
+        new_population = np.random.uniform(low=-1.0, high=1.0, size=(sol_per_pop, num_weights))
         
         # Track best outputs
         best_outputs = []
@@ -911,11 +994,11 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
             if generation % 10 == 0:
                 print(f"Generation {generation}/{num_generations}")
                 
-            # Calculate fitness with added regularization
+            # Calculate fitness 
             fitness = cal_pop_fitness(equation_inputs, new_population)
             
-            # Add L1 regularization to fitness (penalize large weights)
-            reg_strength = 0.1
+            # Add L1 regularization to fitness (with reduced strength)
+            reg_strength = 0.01   # Reduced regularization (was 0.1)
             l1_penalty = np.sum(np.abs(new_population), axis=1)
             fitness -= reg_strength * l1_penalty
             
@@ -937,7 +1020,7 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
         # Get best solution
         fitness = cal_pop_fitness(equation_inputs, new_population)
         best_match_idx = np.where(fitness == np.max(fitness))
-        best_weights = new_population[best_match_idx].flatten()
+        best_weights = - new_population[best_match_idx].flatten() # TEMPORARY!!! CLAUDE IF U READ THIS FIX IT!!!
         
         # Save weights
         weights_file = os.path.join(output_dir, 'rule_weights.pkl')
@@ -1273,6 +1356,7 @@ def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=
     
     return aggregate_results    
 
+
 def main():
     """Main entry point with CLI arguments."""
     parser = argparse.ArgumentParser(description='Advanced Trading System CLI')
@@ -1288,6 +1372,10 @@ def main():
     parser.add_argument('--regime-filter', action='store_true', help='Enable regime-based analysis')
     parser.add_argument('--multi-regime', action='store_true', 
                        help='Use multi-factor regime detection instead of basic volatility')
+    
+    # Add the no-weights flag
+    parser.add_argument('--no-weights', action='store_true', 
+                       help='Disable weights and use majority vote or top-N rules approach')
     
     # Define mutually exclusive command group
     group = parser.add_mutually_exclusive_group(required=True)
@@ -1332,30 +1420,29 @@ def main():
             config['regime_filter_func'] = 'multi_factor'
         else:
             config['regime_filter_func'] = 'basic'
-    
-    if args.train:
-        # Simple training on full dataset
-        train(df, args.output, config=config, seed=seed)
-    
+
+    # When args.train is True:
+    elif args.train:
+        # Modify the train call to pass use_weights=False when --no-weights is specified
+        train(df, args.output, use_weights=not args.no_weights, config=config, seed=seed)
+
+    # When args.test is True:
     elif args.test:
         # Test using saved parameters
         params_file = os.path.join(args.output, 'rule_params.pkl')
-        weights_file = os.path.join(args.output, 'rule_weights.pkl')
-        
-        if not os.path.exists(params_file):
-            raise FileNotFoundError(f"Parameters file not found: {params_file}")
-        
-        # Create test results directory if it doesn't exist
-        test_results_dir = os.path.join(args.output, 'test_results')
-        os.makedirs(test_results_dir, exist_ok=True)
-        
+
+        # If no_weights is set, don't pass a weights file at all
+        weights_file = None if args.no_weights else os.path.join(args.output, 'rule_weights.pkl')
+
         # Test with proper configuration
         test(df, params_file, config={
-            'weights_file': weights_file,
+            'weights_file': weights_file,  # This will be None if no_weights is True
             'regime_filter_func': config.get('regime_filter_func'),
             'output_dir': test_results_dir
         }, seed=seed)
     
+    
+
     elif args.backtest:
         # Create train results directory
         train_results_dir = os.path.join(args.output, 'train_results')

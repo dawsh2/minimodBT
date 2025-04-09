@@ -5,6 +5,8 @@ This simplified version maintains compatibility with your existing code
 while providing a cleaner interface.
 """
 
+
+
 import numpy as np
 import pandas as pd
 from ta import (
@@ -15,7 +17,6 @@ from ta import (
     ichimoku_a, ichimoku_b, vortex_indicator_pos, vortex_indicator_neg
 )
 
-# Rule implementations from your existing code
 def Rule1(param, OHLC):
     # Rule 1: Simple Moving Average Crossover
     ma1, ma2 = param
@@ -26,7 +27,10 @@ def Rule1(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule2(param, OHLC):
     # Rule 2: EMA and close
@@ -38,7 +42,11 @@ def Rule2(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule3(param, OHLC):
     # Rule 3: EMA and EMA
@@ -50,7 +58,11 @@ def Rule3(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule4(param, OHLC):
     # Rule 4: DEMA and MA
@@ -62,7 +74,11 @@ def Rule4(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule5(param, OHLC):
     # Rule 5: DEMA and DEMA
@@ -74,7 +90,11 @@ def Rule5(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule6(param, OHLC):
     # Rule 6: TEMA and ma crossovers
@@ -86,7 +106,11 @@ def Rule6(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule7(param, OHLC):
     # Rule 7: Stochastic oscillator
@@ -98,7 +122,11 @@ def Rule7(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule8(param, OHLC):
     # Rule 8: Vortex indicator
@@ -110,7 +138,11 @@ def Rule8(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule9(param, OHLC):
     # Rule 9: Ichimoku Cloud
@@ -123,7 +155,11 @@ def Rule9(param, OHLC):
     signal = (-1*((s3>s1) & (s3>s2))+1*((s3<s2) & (s3<s1)))
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule10(param, OHLC):
     # Rule 10: RSI threshold
@@ -135,7 +171,11 @@ def Rule10(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule11(param, OHLC):
     # Rule 11: CCI threshold
@@ -147,7 +187,11 @@ def Rule11(param, OHLC):
     signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule12(param, OHLC):
     # Rule 12: RSI range
@@ -158,7 +202,11 @@ def Rule12(param, OHLC):
     signal = (-1*(s1>hl)+1*(s1<ll)) 
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule13(param, OHLC):
     # Rule 13: CCI range
@@ -169,7 +217,11 @@ def Rule13(param, OHLC):
     signal = (-1*(s1>hl)+1*(s1<ll))
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule14(period, OHLC):
     # Rule 14: Keltner Channels
@@ -181,7 +233,11 @@ def Rule14(period, OHLC):
     signal = (-1*(s3>s1)+1*(s3<s2))
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule15(period, OHLC):
     # Rule 15: Donchian Channels
@@ -193,7 +249,11 @@ def Rule15(period, OHLC):
     signal = (-1*(s3>s1)+1*(s3<s2))
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def Rule16(period, OHLC):
     # Rule 16: Bollinger Bands
@@ -205,7 +265,11 @@ def Rule16(period, OHLC):
     signal = (-1*(s3>s1)+1*(s3<s2))
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
-    return (abs(port_logr.sum()), signal)
+    
+    mean = port_logr.mean()
+    std = port_logr.std()
+    score = mean / std if std != 0 else 0
+    return (score, signal)
 
 def trainTradingRuleFeatures(df, regime_filter_func=None):
     '''
@@ -230,6 +294,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
         for i, rule in enumerate(type1):
             print(f"Training Rule{i+1}...")
             best = -1
+            best_param = None  # Initialize to avoid UnboundLocalError
 
             for i_idx in range(len(periods)):
                 for j_idx in range(i_idx, len(periods)):
@@ -242,6 +307,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                     except Exception as e:
                         print(f"Error with parameters {param}: {e}")
                         continue
+            
+            # Use a default parameter if no valid parameters were found
+            if best_param is None:
+                best_param = (periods[0], periods[-1])  # Use first and last period as fallback
+                print(f"Warning: No valid parameters found for Rule{i+1}. Using default: {best_param}")
 
             type1_param.append(best_param)
             type1_score.append(best)
@@ -260,6 +330,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
             print(f"Training Rule{i+10}...")
             params = limits[i]
             best = -1
+            best_param = None  # Initialize to avoid UnboundLocalError
 
             for period in periods:
                 for p in params:
@@ -272,6 +343,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                     except Exception as e:
                         print(f"Error with parameters {param}: {e}")
                         continue
+            
+            # Use a default parameter if no valid parameters were found
+            if best_param is None:
+                best_param = (periods[0], params[len(params)//2])  # Use middle value as fallback
+                print(f"Warning: No valid parameters found for Rule{i+10}. Using default: {best_param}")
 
             type2_param.append(best_param)
             type2_score.append(best)
@@ -286,6 +362,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
             params = limits[i]
             n = len(params)
             best = -1
+            best_param = None  # Initialize to avoid UnboundLocalError
 
             for period in periods:
                 for lb in range(n-1):
@@ -299,6 +376,12 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                         except Exception as e:
                             print(f"Error with parameters {param}: {e}")
                             continue
+            
+            # Use a default parameter if no valid parameters were found
+            if best_param is None:
+                middle_idx = len(params)//2
+                best_param = (periods[0], params[middle_idx+5], params[middle_idx-5])  # Use middle values as fallback
+                print(f"Warning: No valid parameters found for Rule{i+12}. Using default: {best_param}")
 
             type3_param.append(best_param)
             type3_score.append(best)
@@ -311,6 +394,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
         for i, rule in enumerate(type4):
             print(f"Training Rule{i+14}...")
             best = -1
+            best_param = None  # Initialize to avoid UnboundLocalError
 
             for period in periods:
                 try:
@@ -321,6 +405,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                 except Exception as e:
                     print(f"Error with parameter {period}: {e}")
                     continue
+            
+            # Use a default parameter if no valid parameters were found
+            if best_param is None:
+                best_param = periods[len(periods)//2]  # Use middle period as fallback
+                print(f"Warning: No valid parameters found for Rule{i+14}. Using default: {best_param}")
 
             type4_param.append(best_param)
             type4_score.append(best)
@@ -340,8 +429,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
 
         return Rule_params
 
-     # Regime-based optimization
-         # Regime-based optimization
+    # Regime-based optimization
     if regime_filter_func is not None:
         # Split data into regimes
         regime_splits = regime_filter_func(df)
@@ -349,8 +437,26 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
         # Store regime-specific parameters
         regime_rule_params = {}
         
+        # Define a minimum amount of data points required for reliable optimization
+        MIN_REGIME_SIZE = 100
+        
+        # Default parameters to use as fallback for small regimes
+        default_periods = [1, 3, 5, 7, 11, 15, 19, 23, 27, 35, 41, 50, 61]
+        default_type1_param = [(default_periods[0], default_periods[-1]) for _ in range(9)]  # For Rule1-9
+        default_type2_param = [(default_periods[0], 50), (default_periods[0], 0)]  # For Rule10-11 (RSI and CCI)
+        default_type3_param = [(default_periods[0], 75, 25), (default_periods[0], 80, -80)]  # For Rule12-13
+        default_type4_param = [default_periods[len(default_periods)//2] for _ in range(3)]  # For Rule14-16
+        
+        default_params = default_type1_param + default_type2_param + default_type3_param + default_type4_param
+        
         # Train rules for each regime
         for regime_num, regime_data in regime_splits.items():
+            if len(regime_data) < MIN_REGIME_SIZE:
+                print(f"\nSkipping optimization for Regime {regime_num} - insufficient data ({len(regime_data)} points < {MIN_REGIME_SIZE})")
+                print(f"Using default parameters for Regime {regime_num}")
+                regime_rule_params[regime_num] = default_params
+                continue
+                
             print(f"\nOptimizing rules for Regime {regime_num}")
             
             # Prepare OHLC for this regime
@@ -372,6 +478,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
             for i, rule in enumerate(type1):
                 print(f"Training Rule{i+1} for Regime {regime_num}...")
                 best = -1
+                best_param = None  # Initialize to avoid UnboundLocalError
                 
                 for i_idx in range(len(periods)):
                     for j_idx in range(i_idx, len(periods)):
@@ -384,7 +491,12 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                         except Exception as e:
                             print(f"Error with parameters {param}: {e}")
                             continue
-                        
+                
+                # Use a default parameter if no valid parameters were found
+                if best_param is None:
+                    best_param = (periods[0], periods[-1])  # Use first and last period as fallback
+                    print(f"Warning: No valid parameters found for Rule{i+1} in Regime {regime_num}. Using default: {best_param}")
+                
                 type1_param.append(best_param)
                 type1_score.append(best)
             
@@ -403,6 +515,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                 print(f"Training Rule{i+10} for Regime {regime_num}...")
                 params = limits[i]
                 best = -1
+                best_param = None  # Initialize to avoid UnboundLocalError
 
                 for period in periods:
                     for p in params:
@@ -415,6 +528,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                         except Exception as e:
                             print(f"Error with parameters {param}: {e}")
                             continue
+                
+                # Use a default parameter if no valid parameters were found
+                if best_param is None:
+                    best_param = (periods[0], params[len(params)//2])  # Use middle value as fallback
+                    print(f"Warning: No valid parameters found for Rule{i+10} in Regime {regime_num}. Using default: {best_param}")
 
                 type2_param.append(best_param)
                 type2_score.append(best)
@@ -429,6 +547,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                 params = limits[i]
                 n = len(params)
                 best = -1
+                best_param = None  # Initialize to avoid UnboundLocalError
 
                 for period in periods:
                     for lb in range(n-1):
@@ -442,6 +561,12 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                             except Exception as e:
                                 print(f"Error with parameters {param}: {e}")
                                 continue
+                
+                # Use a default parameter if no valid parameters were found
+                if best_param is None:
+                    middle_idx = len(params)//2
+                    best_param = (periods[0], params[middle_idx+5], params[middle_idx-5])  # Use middle values as fallback
+                    print(f"Warning: No valid parameters found for Rule{i+12} in Regime {regime_num}. Using default: {best_param}")
 
                 type3_param.append(best_param)
                 type3_score.append(best)
@@ -454,6 +579,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
             for i, rule in enumerate(type4):
                 print(f"Training Rule{i+14} for Regime {regime_num}...")
                 best = -1
+                best_param = None  # Initialize to avoid UnboundLocalError
 
                 for period in periods:
                     try:
@@ -464,6 +590,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                     except Exception as e:
                         print(f"Error with parameter {period}: {e}")
                         continue
+                
+                # Use a default parameter if no valid parameters were found
+                if best_param is None:
+                    best_param = periods[len(periods)//2]  # Use middle period as fallback
+                    print(f"Warning: No valid parameters found for Rule{i+14} in Regime {regime_num}. Using default: {best_param}")
 
                 type4_param.append(best_param)
                 type4_score.append(best)
@@ -485,14 +616,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
             for i in range(len(All_Rules)):
                 print(f"Rule{i+1} score: {Rule_scores[i]:.3f}, parameters: {regime_rule_params[regime_num][i]}")
             print("="*50 + "\n")
-            
-            # Store parameters for this regime
-            regime_rule_params[regime_num] = type1_param + type2_param + type3_param + type4_param
-            
-            # Print regime-specific results
-            print(f"\nRule Parameters for Regime {regime_num}:")
-            for i, params in enumerate(type1_param, 1):
-                print(f"Rule{i}: {params}")
+        
+        # Create a default regime parameter set as fallback
+        if -1 not in regime_rule_params:
+            print("\nCreating default (fallback) regime parameters")
+            regime_rule_params[-1] = default_params
         
         # Return regime-specific parameters
         return regime_rule_params

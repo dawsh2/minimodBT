@@ -1,5 +1,6 @@
 
 import numpy as np
+import pandas as pd
 
 def generate_top_n_signal(trading_rule_df, logr, regime_series=None, top_n=3):
     rule_cols = [col for col in trading_rule_df.columns if col.startswith("Rule")]

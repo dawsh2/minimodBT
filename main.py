@@ -371,7 +371,12 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
     
     # Train trading rules to find best parameters
     print("Training trading rules...")
-    rule_params = trainTradingRuleFeatures(df)
+    if config and 'regime_filter_func' in config and config['regime_filter_func'] is not None:
+        print("Using regime-based rule optimization...")
+        rule_params = trainTradingRuleFeatures(df, config['regime_filter_func'])
+    else:
+        rule_params = trainTradingRuleFeatures(df)
+
     
     # Save rule parameters
     params_file = os.path.join(output_dir, 'rule_params.pkl')
@@ -476,6 +481,28 @@ def train(df, output_dir, optimize=True, seed=42, config=None):
         
         # Evaluate performance using optimized weights
         print("\nEvaluating strategy performance with optimized weights...")
+        
+        # Check that weights match the number of rules and adjust if needed
+        rule_columns = [col for col in trading_rule_df.columns if col.startswith('Rule')]
+        if len(best_weights) != len(rule_columns):
+            print(f"WARNING: Number of weights ({len(best_weights)}) doesn't match number of rules ({len(rule_columns)})")
+            print("Adjusting weights array to match number of rules...")
+            
+            # Create a new properly sized weights array
+            if len(best_weights) > len(rule_columns):
+                # Trim extra weights
+                best_weights = best_weights[:len(rule_columns)]
+            else:
+                # Extend with zeros
+                best_weights = np.pad(best_weights, (0, len(rule_columns) - len(best_weights)), 'constant')
+                
+            print(f"Adjusted weights array to size {len(best_weights)}")
+            
+            # Update saved weights file
+            with open(weights_file, 'wb') as f:
+                pickle.dump(best_weights, f)
+            print(f"Updated weights file with adjusted weights")
+        
         final_signal = calculate_signal(trading_rule_df, best_weights)
         metrics = calculate_performance_metrics(trading_rule_df, final_signal, detailed=True)
         
@@ -554,6 +581,29 @@ def test(df, params_file, config=None, seed=42):
     else:
         print("No weights file found or provided. Using majority vote of rules.")
 
+    # Check and adjust weights if needed
+    if weights is not None:
+        rule_columns = [col for col in trading_rule_df.columns if col.startswith('Rule')]
+        if len(weights) != len(rule_columns):
+            print(f"WARNING: Number of weights ({len(weights)}) doesn't match number of rules ({len(rule_columns)})")
+            print("Adjusting weights array to match number of rules...")
+            
+            # Create a new properly sized weights array
+            if len(weights) > len(rule_columns):
+                # Trim extra weights
+                weights = weights[:len(rule_columns)]
+            else:
+                # Extend with zeros
+                weights = np.pad(weights, (0, len(rule_columns) - len(weights)), 'constant')
+                
+            print(f"Adjusted weights array to size {len(weights)}")
+            
+            # Update saved weights file if provided
+            if config['weights_file']:
+                with open(config['weights_file'], 'wb') as f:
+                    pickle.dump(weights, f)
+                print(f"Updated weights file with adjusted weights")
+    
     # Calculate signal
     final_signal = calculate_signal(trading_rule_df, weights)
     

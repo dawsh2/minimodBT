@@ -497,9 +497,11 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
         # Return regime-specific parameters
         return regime_rule_params
 
+    # This branch should never be executed now that we have proper regime handling
     else:
-        print("NO REGIME -- DELETE THIS LATER")
-        return False 
+        print("ERROR: Invalid regime configuration detected")
+        # Return a properly formatted empty rule parameter set to avoid downstream errors
+        return []
 
 # Modify getTradingRuleFeatures to handle regime-specific parameters
 def getTradingRuleFeatures(df, rule_params):

@@ -10,6 +10,8 @@ from pathlib import Path
 # Import from existing modules
 from trading_rules import trainTradingRuleFeatures, getTradingRuleFeatures
 from ga import cal_pop_fitness, select_mating_pool, crossover, mutation
+from data_utils import get_trading_rule_features
+from regime_filter import basic_volatility_regime_filter
 
 def set_random_seed(seed=42):
     """Set random seeds for reproducibility."""
@@ -337,19 +339,30 @@ def split_data(df, train_ratio=0.7):
     return train_df, test_df
 
 
-
-def train(df, output_dir, optimize=True, seed=42):
-    """Train trading rules and optimize weights.
+def train(df, output_dir, optimize=True, seed=42, config=None):
+    """
+    Train trading rules and optimize weights.
     
     Args:
         df: DataFrame with OHLC data
         output_dir: Directory to save trained parameters and results
         optimize: Whether to optimize rule weights using GA
         seed: Random seed for reproducibility
+        config: Optional configuration dictionary for advanced settings
         
     Returns:
         Tuple of (rule_params, weights, performance_metrics)
     """
+    # Prepare default configuration
+    default_config = {
+        'regime_filter_func': None,
+        'regime_params': None,
+        'feature_merge_method': 'concatenate'
+    }
+    
+    # Merge default config with provided config
+    config = {**default_config, **(config or {})}
+    
     # Set random seed for reproducibility
     set_random_seed(seed)
     
@@ -367,7 +380,13 @@ def train(df, output_dir, optimize=True, seed=42):
     print(f"Saved rule parameters to {params_file}")
     
     # Get trading rule features using best parameters
-    trading_rule_df = getTradingRuleFeatures(df, rule_params)
+    trading_rule_df = get_trading_rule_features(
+        df, 
+        rule_params,
+        regime_filter_func=config['regime_filter_func'],
+        regime_params=config['regime_params'],
+        feature_merge_method=config['feature_merge_method']
+    )
     
     # Calculate and display individual rule performance
     rule_stats = calculate_individual_rule_performance(trading_rule_df)
@@ -378,16 +397,16 @@ def train(df, output_dir, optimize=True, seed=42):
         pickle.dump(rule_stats, f)
     
     if optimize:
-        # Optimize rule weights using genetic algorithm
+        # Genetic Algorithm optimization (similar to previous implementation)
         print("\nOptimizing rule weights using genetic algorithm...")
         
         # Prepare data for GA
         equation_inputs = trading_rule_df.values
         
-        # GA parameters with regularization
+        # GA parameters (could be made configurable)
         sol_per_pop = 8
         num_parents_mating = 4
-        num_generations = 50  # Reduced to prevent overfitting
+        num_generations = 50
         
         # Number of weights is the number of trading rules
         num_weights = equation_inputs.shape[1] - 1  # Subtract 1 for logr column
@@ -458,13 +477,6 @@ def train(df, output_dir, optimize=True, seed=42):
         # Evaluate performance using optimized weights
         print("\nEvaluating strategy performance with optimized weights...")
         final_signal = calculate_signal(trading_rule_df, best_weights)
-        
-        # Save the signal for debugging
-        signal_file = os.path.join(output_dir, 'training_signal.pkl')
-        with open(signal_file, 'wb') as f:
-            pickle.dump(final_signal, f)
-        print(f"Saved training signal to {signal_file}")
-        
         metrics = calculate_performance_metrics(trading_rule_df, final_signal, detailed=True)
         
         # Print and plot the results
@@ -490,42 +502,61 @@ def train(df, output_dir, optimize=True, seed=42):
         return rule_params, None, metrics
 
 
-def test(df, params_file, weights_file=None, output_dir=None, seed=42):
-    """Test trading strategy using trained parameters.
+def test(df, params_file, config=None):
+    """
+    Test trading strategy with flexible configuration.
     
     Args:
         df: DataFrame with OHLC data
         params_file: Path to rule parameters pickle file
-        weights_file: Path to optimized weights pickle file (optional)
-        output_dir: Directory to save results and charts (optional)
-        seed: Random seed for reproducibility
-        
+        config: Optional configuration dictionary
+    
     Returns:
         Dictionary of performance metrics
     """
+    # Default configuration
+    # Configs are about to get bloated and nasty, fix! 
+    default_config = {
+        'weights_file': None,
+        'output_dir': None,
+        'seed': 42,
+        'regime_filter_func': None,
+        'regime_params': None,
+        'feature_merge_method': 'concatenate'
+    }
+    
+    # Merge default config with provided config
+    config = {**default_config, **(config or {})}
+    
     # Set random seed
-    set_random_seed(seed)
+    set_random_seed(config['seed'])
     
     # Create output directory if provided and doesn't exist
-    if output_dir:
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+    if config['output_dir']:
+        Path(config['output_dir']).mkdir(parents=True, exist_ok=True)
     
     # Load rule parameters
     with open(params_file, 'rb') as f:
         rule_params = pickle.load(f)
     
-    # Get trading rule features
-    trading_rule_df = getTradingRuleFeatures(df, rule_params)
+    # Get trading rule features with flexible configuration
+    trading_rule_df = get_trading_rule_features(
+        df, 
+        rule_params,
+        regime_filter_func=config['regime_filter_func'],
+        regime_params=config['regime_params'],
+        feature_merge_method=config['feature_merge_method']
+    )
     
     # Load weights if provided
     weights = None
-    if weights_file and os.path.exists(weights_file):
-        with open(weights_file, 'rb') as f:
+    if config['weights_file'] and os.path.exists(config['weights_file']):
+        with open(config['weights_file'], 'rb') as f:
             weights = pickle.load(f)
-        print(f"Using optimized weights from {weights_file}")
+        print(f"Using optimized weights from {config['weights_file']}")
     else:
         print("No weights file found or provided. Using majority vote of rules.")
-    
+
     # Calculate signal
     final_signal = calculate_signal(trading_rule_df, weights)
     
@@ -548,7 +579,9 @@ def test(df, params_file, weights_file=None, output_dir=None, seed=42):
         save_performance_data(metrics, output_dir, 'backtest_data.csv')
     
     return metrics
-    
+
+
+
 def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=42):
     """Perform walk-forward backtesting to evaluate strategy robustness.
     
@@ -600,7 +633,7 @@ def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=
         weights_file = os.path.join(window_output, 'rule_weights.pkl')
         
         # Get trading rule features for test set
-        test_trading_rule_df = getTradingRuleFeatures(test_df, rule_params)
+        test_trading_rule_df = get_trading_rule_features # getTradingRuleFeatures(test_df, rule_params)
         
         # Apply weights or use majority vote
         if weights is not None:
@@ -612,7 +645,7 @@ def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=
         test_metrics = calculate_performance_metrics(test_trading_rule_df, test_signal, detailed=True)
         
         # Compare rule signals between train and test
-        train_rule_df = getTradingRuleFeatures(train_df, rule_params)
+        train_rule_df = get_trading_rule_features # getTradingRuleFeatures(train_df, rule_params)
         signal_comparison = compare_rule_signals(train_rule_df, test_trading_rule_df)
         signal_comparisons.append(signal_comparison)
         
@@ -665,7 +698,6 @@ def walk_forward_backtest(df, output_dir, window_size=0.3, step_size=0.15, seed=
     
     return aggregate_results
 
-
 def main():
     """Main entry point with CLI arguments."""
     parser = argparse.ArgumentParser(description='Advanced Trading System CLI')
@@ -676,6 +708,9 @@ def main():
     parser.add_argument('--train-ratio', type=float, default=0.7, help='Ratio of data to use for training')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--random-seed', action='store_true', help='Use a time-based random seed')
+    
+    # Add regime filtering option
+    parser.add_argument('--regime-filter', action='store_true', help='Enable regime-based analysis')
     
     # Define mutually exclusive command group
     group = parser.add_mutually_exclusive_group(required=True)
@@ -707,9 +742,16 @@ def main():
     # Load data
     df = load_data(args.data)
     
+    # Prepare config for regime filtering
+    config = {}
+    if args.regime_filter:
+        # Import the basic volatility regime filter
+        from regime_filter import basic_volatility_regime_filter
+        config['regime_filter_func'] = basic_volatility_regime_filter
+    
     if args.train:
         # Simple training on full dataset
-        train(df, args.output, seed=seed)
+        train(df, args.output, config=config, seed=seed)
     
     elif args.test:
         # Test using saved parameters
@@ -725,7 +767,10 @@ def main():
             with open(weights_file, 'rb') as f:
                 weights = pickle.load(f)
         
-        test(df, params_file, weights_file, args.output, seed=seed)
+        test(df, params_file, config={
+            'weights_file': weights_file,
+            'regime_filter_func': config.get('regime_filter_func')
+        }, seed=seed)
     
     elif args.backtest:
         # Create train results directory
@@ -739,6 +784,7 @@ def main():
             walk_forward_backtest(
                 df, 
                 args.output, 
+                config=config,
                 window_size=args.window_size, 
                 step_size=args.step_size,
                 seed=seed
@@ -749,7 +795,12 @@ def main():
             train_df, test_df = split_data(df, args.train_ratio)
             
             # Train on training data
-            rule_params, weights, train_metrics = train(train_df, train_results_dir, seed=seed)
+            rule_params, weights, train_metrics = train(
+                train_df, 
+                train_results_dir, 
+                config=config, 
+                seed=seed
+            )
             
             # Test on testing data
             params_file = os.path.join(train_results_dir, 'rule_params.pkl')
@@ -758,7 +809,15 @@ def main():
             test_results_dir = os.path.join(args.output, 'test_results')
             os.makedirs(test_results_dir, exist_ok=True)
             
-            test_metrics = test(test_df, params_file, weights_file, test_results_dir, seed=seed)
+            test_metrics = test(
+                test_df, 
+                params_file, 
+                config={
+                    'weights_file': weights_file,
+                    'regime_filter_func': config.get('regime_filter_func')
+                },
+                seed=seed
+            )
             
             # Compare train and test performance
             print_train_test_comparison(train_metrics, test_metrics)

@@ -9,65 +9,6 @@ import numpy as np
 import pandas as pd
 from typing import List, Callable, Dict, Union, Optional
 
-# !!!: FIX 
-# Wrapper to work with legacy code, getTradingRuleFeatures
-# This is also a bad name imo
-def get_trading_rule_features(
-    df, 
-    rule_params, 
-    regime_filter_func=None, 
-    regime_params=None, 
-    feature_merge_method='concatenate'
-):
-    """
-    Flexible trading rule feature generation with optional regime support.
-    
-    Args:
-        df: DataFrame with OHLC data
-        rule_params: Default parameters for trading rules
-        regime_filter_func: Optional function to detect market regimes
-        regime_params: Optional parameters for different regimes
-        feature_merge_method: Method to merge regime features
-    
-    Returns:
-        DataFrame with trading rule features
-    """
-    from trading_rules import (
-        Rule1, Rule2, Rule3, Rule4, Rule5, Rule6, Rule7, Rule8, 
-        Rule9, Rule10, Rule11, Rule12, Rule13, Rule14, Rule15, Rule16
-    )
-    All_Rules = [
-        Rule1, Rule2, Rule3, Rule4, Rule5, Rule6, Rule7, Rule8, 
-        Rule9, Rule10, Rule11, Rule12, Rule13, Rule14, Rule15, Rule16
-    ]
-    
-    # If no regime filter is provided, use traditional method
-    if regime_filter_func is None:
-        return getTradingRuleFeatures(df, rule_params)
-    
-    # Prepare regime parameters
-    if regime_params is None:
-        # Default is to use the same parameters for all regimes
-        regime_params = {-1: rule_params}
-    else:
-        # Ensure a default parameter set exists
-        if -1 not in regime_params:
-            regime_params[-1] = rule_params
-    
-    # Perform regime-based feature generation
-    regime_features = prepare_regime_features(
-        df, 
-        All_Rules, 
-        regime_params, 
-        regime_filter_func
-    )
-    
-    # Merge regime features
-    return merge_regime_features(
-        regime_features, 
-        method=feature_merge_method
-    )
-
 def prepare_trading_features(
     df: pd.DataFrame, 
     rule_funcs: List[Callable], 

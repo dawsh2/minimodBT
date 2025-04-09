@@ -1,0 +1,27 @@
+# Import the basic volatility regime filter
+from regime_filter import basic_volatility_regime_filter
+
+# Load your data
+df = load_data('your_data.csv')
+
+
+# Or for a simple train-test split backtest
+train_df, test_df = split_data(df)
+
+# Train with regime filtering
+train(
+    train_df, 
+    output_dir, 
+    config={
+        'regime_filter_func': basic_volatility_regime_filter
+    }
+)
+
+# Test with the same regime filter
+test(
+    test_df, 
+    os.path.join(output_dir, 'rule_params.pkl'),
+    config={
+        'regime_filter_func': basic_volatility_regime_filter
+    }
+)

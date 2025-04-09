@@ -35,8 +35,8 @@ def calculate_signal(trading_rule_df, weights=None):
         
         # Discretize the signal (-1, 0, 1)
         final_signal = pd.Series(0, index=trading_rule_df.index)
-        final_signal[weighted_signal > 0.2] = 1
-        final_signal[weighted_signal < -0.2] = -1
+        # final_signal[weighted_signal > 0.2] = 1
+        # final_signal[weighted_signal < -0.2] = -1
     else:
         # Simple majority vote if no weights
         signals = trading_rule_df[rule_columns].sum(axis=1)
@@ -225,6 +225,36 @@ def print_train_test_comparison(train_metrics, test_metrics):
     print(f"Trades:         {train_metrics['num_trades']:>8}        {test_metrics['num_trades']:>8}")
     print("="*50)
 
+def compare_rule_signals(train_data, test_data):
+    """Compare rule signals between training and testing sets."""
+    rule_columns = [col for col in train_data.columns if col.startswith('Rule')]
+    
+    print("\nRule Signal Comparison (Train vs Test):")
+    print("-" * 70)
+    print(f"{'Rule':<10} {'Train Mean':<12} {'Test Mean':<12} {'Train STD':<12} {'Test STD':<12} {'Correlation':<12}")
+    print("-" * 70)
+    
+    for col in rule_columns:
+        train_mean = train_data[col].mean()
+        test_mean = test_data[col].mean()
+        train_std = train_data[col].std()
+        test_std = test_data[col].std()
+        
+        # Calculate correlation if there's an overlap period
+        if len(train_data) > 0 and len(test_data) > 0:
+            try:
+                train_recent = train_data[col].iloc[-min(30, len(train_data)):]
+                test_recent = test_data[col].iloc[:min(30, len(test_data))]
+                corr = np.corrcoef(train_recent, test_recent)[0, 1]
+            except:
+                corr = np.nan
+        else:
+            corr = np.nan
+        
+        print(f"{col:<10} {train_mean:>10.3f}   {test_mean:>10.3f}   {train_std:>10.3f}   {test_std:>10.3f}   {corr:>10.3f}")
+    
+    print("-" * 70)
+    
 def load_data(filepath):
     """Load data from CSV file."""
     print(f"Loading data from {filepath}")
@@ -372,6 +402,13 @@ def train(df, output_dir, optimize=True):
         save_performance_data(metrics, output_dir, 'training_performance.csv')
         
         print("Training and optimization complete!")
+
+        # Save the weights and signal for debugging
+        if output_dir:
+            signal_file = os.path.join(output_dir, 'training_signal.pkl')
+            with open(signal_file, 'wb') as f:
+                pickle.dump(final_signal, f)
+            print(f"Saved training signal to {signal_file}")
         return rule_params, best_weights, metrics
     
     else:

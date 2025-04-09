@@ -23,7 +23,7 @@ def Rule1(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = close.rolling(ma1).mean()
     s2 = close.rolling(ma2).mean()
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -35,7 +35,7 @@ def Rule2(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = ema(close, ema1)
     s2 = close.rolling(ma2).mean()
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -47,7 +47,7 @@ def Rule3(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = ema(close, ema1)
     s2 = ema(close, ema2)
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -59,7 +59,7 @@ def Rule4(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = DEMA(close, dema1)
     s2 = close.rolling(ma2).mean()
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -71,7 +71,7 @@ def Rule5(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = DEMA(close, dema1)
     s2 = DEMA(close, dema2)
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -83,7 +83,7 @@ def Rule6(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = TEMA(close, tema1)
     s2 = close.rolling(ma2).mean()
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -95,7 +95,7 @@ def Rule7(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = stoch(high, low, close, stoch1)
     s2 = s1.rolling(stochma2, min_periods=0).mean()
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -107,7 +107,7 @@ def Rule8(param, OHLC):
     logr = np.log(close/close.shift(1))
     s1 = vortex_indicator_pos(high, low, close, vortex1)
     s2 = vortex_indicator_neg(high, low, close, vortex2)
-    signal = 2*(s1>s2).astype(int)-1
+    signal = 2*(s1<s2).astype(int)-1
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)
@@ -155,7 +155,7 @@ def Rule12(param, OHLC):
     open, high, low, close = OHLC
     logr = np.log(close/close.shift(1))
     s1 = rsi(close, rsi1)
-    signal = (-1*(s1>hl)+1*(s1<ll))
+    signal = (-1*(s1>hl)+1*(s1<ll)) 
     signal = signal.shift(1).fillna(0).astype(int)  # Prevent lookahead bias
     port_logr = signal*logr
     return (abs(port_logr.sum()), signal)

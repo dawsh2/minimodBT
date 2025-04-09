@@ -7,7 +7,10 @@ generating rule features, and supporting regime-based analysis.
 
 import numpy as np
 import pandas as pd
-from typing import List, Callable, Dict, Union, Optional
+import matplotlib.dates as mdates
+from typing import List, Callable, Dict, Union, Optional, Tuple
+
+
 
 def prepare_trading_data(df):
     """
@@ -92,8 +95,24 @@ def get_trading_rule_features(
     regime_splits = regime_filter_func(df)
     print(f"Found {len(regime_splits)} market regimes")
     
-    # Prepare features for each regime
-    regime_features = {}
+    # Create a DataFrame to store the regime for each date
+    regime_map = pd.Series(index=df.index)
+    for regime, regime_data in regime_splits.items():
+        regime_map.loc[regime_data.index] = regime
+    
+    # Fill any remaining dates with the default regime (-1)
+    regime_map = regime_map.fillna(-1)
+    
+    # Initialize an empty DataFrame with all the original dates
+    merged_df = pd.DataFrame(index=df.index)
+    merged_df['logr'] = np.log(df.Close/df.Close.shift(1))
+    
+    # Initialize rule columns with zeros
+    rule_columns = [f'Rule{i+1}' for i in range(16)]  # Assuming 16 rules
+    for col in rule_columns:
+        merged_df[col] = 0.0
+    
+    # Process each regime and fill in the corresponding rows
     for regime, regime_data in regime_splits.items():
         print(f"Generating features for regime {regime} ({len(regime_data)} data points)...")
         # Get parameters for this specific regime, fall back to default if not found
@@ -103,46 +122,26 @@ def get_trading_rule_features(
         )
         
         # Generate features for this regime using the appropriate parameters
-        regime_features[regime] = getTradingRuleFeatures(
+        regime_features = getTradingRuleFeatures(
             regime_data, 
             regime_specific_params
         )
         
-        # Add a column to identify the regime (helpful for analysis)
-        regime_features[regime]['regime'] = regime
+        # Fill in the main DataFrame with this regime's features
+        for col in rule_columns:
+            if col in regime_features.columns:
+                # Only update rows for this regime
+                merged_df.loc[regime_features.index, col] = regime_features[col]
     
-    # Merge regime features based on the specified method
-    if feature_merge_method == 'concatenate':
-        # Simple concatenation of DataFrames
-        print("Merging regime features by concatenation...")
-        merged_df = pd.concat(regime_features.values(), axis=0)
-        print(f"Final merged dataset has {len(merged_df)} rows")
-        return merged_df
+    # Add regime column for analysis
+    merged_df['regime'] = regime_map
     
-    elif feature_merge_method == 'weighted':
-        # More complex weighted merging (example implementation)
-        print("Merging regime features with weighting...")
-        total_weights = sum(len(df) for df in regime_features.values())
-        merged_df = pd.DataFrame()
-        
-        for regime, df in regime_features.items():
-            # Scale weights based on DataFrame size
-            weight = len(df) / total_weights
-            print(f"Regime {regime} weight: {weight:.4f}")
-            
-            # Optionally apply weighting to rule columns
-            weighted_df = df.copy()
-            rule_columns = [col for col in df.columns if col.startswith('Rule')]
-            for col in rule_columns:
-                weighted_df[col] *= weight
-            
-            merged_df = pd.concat([merged_df, weighted_df], axis=0)
-        
-        print(f"Final merged dataset has {len(merged_df)} rows")
-        return merged_df
+    # Drop rows with NaN (typically just the first row due to returns calculation)
+    merged_df.dropna(inplace=True)
     
-    else:
-        raise ValueError(f"Unknown merging method: {feature_merge_method}")
+    print(f"Final merged dataset has {len(merged_df)} rows")
+    return merged_df
+
 
 def prepare_trading_features(
     df: pd.DataFrame, 
@@ -327,4 +326,83 @@ def prepare_aligned_data(df):
     aligned_df = aligned_df.dropna()
     
     return aligned_df
+
+def configure_date_axis(ax, data_series):
+    """
+    Configure matplotlib date axis with appropriate formatting based on data span.
+    
+    This helps avoid the "Locator attempting to generate too many ticks" error
+    by adaptively choosing appropriate date formatters and locators.
+    
+    Args:
+        ax: Matplotlib axis object
+        data_series: Pandas Series with datetime index
+        
+    Returns:
+        None - modifies axis in place
+    """
+    if len(data_series) == 0:
+        return
+    
+    # Check if the index is a datetime index
+    if not isinstance(data_series.index, pd.DatetimeIndex):
+        # Try to safely get the min and max date values
+        try:
+            # For numeric indices, we'll just use a reasonable default
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+            ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=10))
+            return
+        except Exception as e:
+            print(f"Warning: Unable to configure date axis: {e}")
+            return
+    
+    # Calculate data span in days
+    try:
+        data_span = (data_series.index[-1] - data_series.index[0]).days
+    except AttributeError:
+        # If we can't calculate days (e.g., not datetime objects), use number of points
+        data_span = len(data_series)
+        
+        # Set reasonable defaults based on the number of data points
+        if data_span > 1000:
+            ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=20))
+        else:
+            ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=10))
+        
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        return
+    
+    # Configure date formatting and locators based on data span
+    if data_span > 1500:  # More than ~4 years
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+    elif data_span > 730:  # More than 2 years
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
+    elif data_span > 365:  # More than a year
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    elif data_span > 180:  # More than 6 months
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    elif data_span > 90:  # More than 3 months
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=2))
+    elif data_span > 30:  # More than a month
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
+    elif data_span > 7:  # More than a week
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    else:  # Less than a week
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        
+    # Add minor ticks for better readability on longer timeframes
+    if data_span > 365:
+        ax.xaxis.set_minor_locator(mdates.MonthLocator())
+    elif data_span > 30:
+        ax.xaxis.set_minor_locator(mdates.DayLocator(interval=7))
+    elif data_span > 7:
+        ax.xaxis.set_minor_locator(mdates.DayLocator(interval=1))
     

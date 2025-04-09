@@ -336,6 +336,8 @@ def split_data(df, train_ratio=0.7):
     print(f"Split data: {len(train_df)} training rows, {len(test_df)} testing rows")
     return train_df, test_df
 
+
+
 def train(df, output_dir, optimize=True, seed=42):
     """Train trading rules and optimize weights.
     

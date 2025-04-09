@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/daws/minimodBT/ast.py", line 1, in <module>
+    import ast
+  File "/Users/daws/minimodBT/ast.py", line 21, in <module>
+    for name, args, doc in extract_functions_and_docstrings(file_path):
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/daws/minimodBT/ast.py", line 7, in extract_functions_and_docstrings
+    tree = ast.parse(source)
+           ^^^^^^^^^
+AttributeError: partially initialized module 'ast' has no attribute 'parse' (most likely due to a circular import)

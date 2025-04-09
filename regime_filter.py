@@ -26,10 +26,15 @@ def basic_volatility_regime_filter(df, method='percentile'):
         # Use percentile-based regime splitting
         vol_low = volatility.quantile(0.25)
         vol_high = volatility.quantile(0.75)
+        print(f"Volatility thresholds - Low: {vol_low:.6f}, High: {vol_high:.6f}")
     else:
         # Use fixed thresholds
         vol_low = volatility.mean() - volatility.std()
         vol_high = volatility.mean() + volatility.std()
+        print(f"Volatility thresholds - Low: {vol_low:.6f}, High: {vol_high:.6f}")
+    
+    # Store thresholds as attribute for visualization
+    basic_volatility_regime_filter.thresholds = (vol_low, vol_high)
     
     # Classify regimes
     regime_series = pd.Series(0, index=df.index)
@@ -48,6 +53,7 @@ def basic_volatility_regime_filter(df, method='percentile'):
         
         if not regime_data.empty:
             regime_splits[regime] = regime_data
+            print(f"Regime {regime} ({describe_regime(regime)}): {len(regime_data)} data points ({len(regime_data)/len(df)*100:.1f}% of total)")
     
     return regime_splits
 

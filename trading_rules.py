@@ -386,7 +386,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
                             continue
                         
                 type1_param.append(best_param)
-                type1_score.appeand(best)
+                type1_score.append(best)
             
 
             # Define limits for RSI and CCI
@@ -487,7 +487,7 @@ def trainTradingRuleFeatures(df, regime_filter_func=None):
             print("="*50 + "\n")
             
             # Store parameters for this regime
-            regime_rule_params[regime_num] = type1_param
+            regime_rule_params[regime_num] = type1_param + type2_param + type3_param + type4_param
             
             # Print regime-specific results
             print(f"\nRule Parameters for Regime {regime_num}:")

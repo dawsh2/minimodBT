@@ -34,15 +34,13 @@ def get_trading_rule_features(
     """
     from trading_rules import (
         Rule1, Rule2, Rule3, Rule4, Rule5, Rule6, Rule7, Rule8, 
-        Rule9, Rule10, Rule11, Rule12, Rule13, Rule14, Rule15, Rule16
+        Rule9, Rule10, Rule11, Rule12, Rule13, Rule14, Rule15, Rule16,
+        getTradingRuleFeatures
     )
-    All_Rules = [
-        Rule1, Rule2, Rule3, Rule4, Rule5, Rule6, Rule7, Rule8, 
-        Rule9, Rule10, Rule11, Rule12, Rule13, Rule14, Rule15, Rule16
-    ]
     
     # If no regime filter is provided, use traditional method
     if regime_filter_func is None:
+        print("Using standard (non-regime) feature generation...")
         return getTradingRuleFeatures(df, rule_params)
     
     # Prepare regime parameters
@@ -54,19 +52,62 @@ def get_trading_rule_features(
         if -1 not in regime_params:
             regime_params[-1] = rule_params
     
-    # Perform regime-based feature generation
-    regime_features = prepare_regime_features(
-        df, 
-        All_Rules, 
-        regime_params, 
-        regime_filter_func
-    )
+    # Detect regimes in the data
+    print("Detecting market regimes...")
+    regime_splits = regime_filter_func(df)
+    print(f"Found {len(regime_splits)} market regimes")
     
-    # Merge regime features
-    return merge_regime_features(
-        regime_features, 
-        method=feature_merge_method
-    )
+    # Prepare features for each regime
+    regime_features = {}
+    for regime, regime_data in regime_splits.items():
+        print(f"Generating features for regime {regime} ({len(regime_data)} data points)...")
+        # Get parameters for this specific regime, fall back to default if not found
+        regime_specific_params = regime_params.get(
+            regime, 
+            regime_params.get(-1)
+        )
+        
+        # Generate features for this regime using the appropriate parameters
+        regime_features[regime] = getTradingRuleFeatures(
+            regime_data, 
+            regime_specific_params
+        )
+        
+        # Add a column to identify the regime (helpful for analysis)
+        regime_features[regime]['regime'] = regime
+    
+    # Merge regime features based on the specified method
+    if feature_merge_method == 'concatenate':
+        # Simple concatenation of DataFrames
+        print("Merging regime features by concatenation...")
+        merged_df = pd.concat(regime_features.values(), axis=0)
+        print(f"Final merged dataset has {len(merged_df)} rows")
+        return merged_df
+    
+    elif feature_merge_method == 'weighted':
+        # More complex weighted merging (example implementation)
+        print("Merging regime features with weighting...")
+        total_weights = sum(len(df) for df in regime_features.values())
+        merged_df = pd.DataFrame()
+        
+        for regime, df in regime_features.items():
+            # Scale weights based on DataFrame size
+            weight = len(df) / total_weights
+            print(f"Regime {regime} weight: {weight:.4f}")
+            
+            # Optionally apply weighting to rule columns
+            weighted_df = df.copy()
+            rule_columns = [col for col in df.columns if col.startswith('Rule')]
+            for col in rule_columns:
+                weighted_df[col] *= weight
+            
+            merged_df = pd.concat([merged_df, weighted_df], axis=0)
+        
+        print(f"Final merged dataset has {len(merged_df)} rows")
+        return merged_df
+    
+    else:
+        raise ValueError(f"Unknown merging method: {feature_merge_method}")
 
 def prepare_trading_features(
     df: pd.DataFrame, 
